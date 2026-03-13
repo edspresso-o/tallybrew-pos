@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import Sidebar from './components/Sidebar.jsx';
 import Dashboard from './components/Dashboard.jsx';
+import KitchenDisplay from './components/KitchenDisplay.jsx';
 import Menu from './components/Menu.jsx';
 import Cart from './components/Cart.jsx';
 import Inventory from './components/Inventory.jsx';
@@ -28,6 +29,9 @@ function App() {
   const [inventory, setInventory] = useState([]); 
   const [sales, setSales] = useState([]);
   const [cart, setCart] = useState([]);
+  
+  // NEW STATE: Holds the recipes from the database
+  const [recipes, setRecipes] = useState([]);
   
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false); 
@@ -88,6 +92,10 @@ function App() {
     
     const { data: sData } = await supabase.from('sales').select('*').order('created_at', { ascending: true });
     if (sData) setSales(sData);
+
+    // NEW FETCH: Gets the recipe links to check stock
+    const { data: rData } = await supabase.from('recipes').select('*');
+    if (rData) setRecipes(rData);
   };
 
   useEffect(() => {
@@ -276,6 +284,25 @@ function App() {
         modifiers: modifiers
       }]);
 
+      // =========================================================================
+      // NEW: RELATIONAL RECIPE DEDUCTION (Subtracts main ingredients)
+      // Because modifiers change the cartItem.id (e.g., "36-Large-Whole"), we extract the original base ID:
+      const baseProductId = cartItem.id.toString().split('-')[0];
+      const drinkRecipe = recipes.filter(r => r.menu_item_id.toString() === baseProductId);
+      
+      for (const ingredient of drinkRecipe) {
+        const amountToDeduct = Number(ingredient.quantity_required) * cartItem.qty;
+        
+        const { data: ingData } = await supabase.from('inventory').select('stock_qty').eq('id', ingredient.inventory_item_id).single();
+        if (ingData) {
+          const newQty = Number(ingData.stock_qty) - amountToDeduct;
+          await supabase.from('inventory').update({ stock_qty: newQty }).eq('id', ingredient.inventory_item_id);
+        }
+      }
+      // =========================================================================
+
+      // =========================================================================
+      // EXISTING: JSON RECIPE DEDUCTION (Kept safe for your Add-ons/Milks logic!)
       if (cartItem.recipe && cartItem.recipe.startsWith('[')) {
         try {
           const recipeList = JSON.parse(cartItem.recipe);
@@ -288,6 +315,7 @@ function App() {
           }
         } catch(e) { console.error("Error parsing recipe", e) }
       }
+      // =========================================================================
     }
   };
 
@@ -484,11 +512,29 @@ function App() {
                 <Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} />
               </div>
             )}
+
+            {/* ---> HERE IS THE NEW KITCHEN VIEW <--- */}
+            {currentView === 'Kitchen' && (
+              <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}>
+                <KitchenDisplay />
+              </div>
+            )}
             
             {currentView === 'Menu' && (
               <>
                 <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-                  <Menu menuItems={displayedItems} categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} addToCart={handleItemClick} onManageClick={() => setIsAddProductOpen(true)} deleteProduct={requestDeleteProduct} editProduct={setEditingProduct} />
+                  <Menu 
+                    menuItems={displayedItems} 
+                    categories={categories} 
+                    activeCategory={activeCategory} 
+                    setActiveCategory={setActiveCategory} 
+                    addToCart={handleItemClick} 
+                    onManageClick={() => setIsAddProductOpen(true)} 
+                    deleteProduct={requestDeleteProduct} 
+                    editProduct={setEditingProduct} 
+                    inventory={inventory} 
+                    recipes={recipes} 
+                  />
                 </div>
                 
                 {cart.length > 0 ? (
