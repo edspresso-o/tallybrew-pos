@@ -19,18 +19,24 @@ import CashierLock from './components/CashierLock.jsx';
 import LandingPage from './components/LandingPage.jsx';
 import './App.css';
 
+let isCloningInventory = false;
+
 function App() {
   const [session, setSession] = useState(null); 
   const [activeCashier, setActiveCashier] = useState(null); 
   const [showLanding, setShowLanding] = useState(true); 
   const [currentView, setCurrentView] = useState("Menu");
   
+  const [isKitchenKiosk, setIsKitchenKiosk] = useState(localStorage.getItem('tallybrew_kiosk') === 'true');
+
+  const activeLocation = localStorage.getItem('tallybrew_branch');
+  const [adminViewBranch, setAdminViewBranch] = useState(null);
+  const [empireBranches, setEmpireBranches] = useState([]);
+
   const [menuItems, setMenuItems] = useState([]);
   const [inventory, setInventory] = useState([]); 
   const [sales, setSales] = useState([]);
   const [cart, setCart] = useState([]);
-  
-  // NEW STATE: Holds the recipes from the database
   const [recipes, setRecipes] = useState([]);
   
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -56,8 +62,8 @@ function App() {
   const [showEndShift, setShowEndShift] = useState(false);
   const [endingCashInput, setEndingCashInput] = useState("");
   
-  const [shiftSalesAmount, setShiftSalesAmount] = useState(0);
-  const [shiftExpectedCash, setShiftExpectedCash] = useState(0);
+  const [shiftStats, setShiftStats] = useState(null);
+  const [showShiftReport, setShowShiftReport] = useState(false);
 
   const [modifierModal, setModifierModal] = useState({
     isOpen: false,
@@ -69,8 +75,6 @@ function App() {
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingSalesCount, setPendingSalesCount] = useState(0);
-  
-  // NEW STATE: Controls the mobile hamburger menu
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const categories = ["All", "Hot Coffee", "Iced Coffee", "Non-Coffee", "Frappe", "Snacks", "Rice Meals", "Add-on", "Milk"];
@@ -84,37 +88,73 @@ function App() {
   };
 
   const fetchAllData = async () => {
+    const loc = localStorage.getItem('tallybrew_branch');
+
+    if (loc === 'admin_remote' && empireBranches.length === 0) {
+      const { data: bData } = await supabase.from('branches').select('*').order('name');
+      if (bData && bData.length > 0) {
+        setEmpireBranches(bData);
+        if (!adminViewBranch) setAdminViewBranch(bData[0].id);
+      }
+    }
+
+    const effectiveBranch = loc === 'admin_remote' 
+      ? (adminViewBranch || (empireBranches.length > 0 ? empireBranches[0].id : null)) 
+      : loc;
+
     const { data: pData } = await supabase.from('products').select('*').order('name', { ascending: true });
     if (pData) setMenuItems(pData);
     
-    const { data: iData } = await supabase.from('inventory').select('*').order('name', { ascending: true });
-    if (iData) setInventory(iData);
-    
-    const { data: sData } = await supabase.from('sales').select('*').order('created_at', { ascending: true });
-    if (sData) setSales(sData);
-
-    // NEW FETCH: Gets the recipe links to check stock
     const { data: rData } = await supabase.from('recipes').select('*');
     if (rData) setRecipes(rData);
+
+    if (effectiveBranch && effectiveBranch !== 'admin_remote') {
+      const { data: iData } = await supabase.from('inventory').select('*').eq('branch_id', effectiveBranch).order('name', { ascending: true });
+      
+      if (iData && iData.length === 0) {
+        if (!isCloningInventory) {
+          isCloningInventory = true; 
+          try {
+            const { data: allInv } = await supabase.from('inventory').select('*');
+            if (allInv) {
+              const masterInv = allInv.filter(i => i.branch_id !== effectiveBranch);
+              const uniqueItems = [];
+              const map = new Map();
+              
+              masterInv.forEach(item => {
+                if(!map.has(item.name.toLowerCase())) {
+                  map.set(item.name.toLowerCase(), true);
+                  uniqueItems.push({ name: item.name, stock_qty: 0, unit: item.unit, branch_id: effectiveBranch });
+                }
+              });
+              
+              if (uniqueItems.length > 0) {
+                await supabase.from('inventory').insert(uniqueItems);
+                const { data: newIData } = await supabase.from('inventory').select('*').eq('branch_id', effectiveBranch).order('name', { ascending: true });
+                setInventory(newIData || []);
+              } else {
+                setInventory([]);
+              }
+            }
+          } catch (e) { console.error("Error cloning:", e); } finally { isCloningInventory = false; }
+        }
+      } else {
+        setInventory(iData || []);
+      }
+      
+      const { data: sData } = await supabase.from('sales').select('*').eq('branch_id', effectiveBranch).order('created_at', { ascending: true });
+      if (sData) setSales(sData);
+    }
   };
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      syncPendingQueue();
-    };
+    const handleOnline = () => { setIsOnline(true); syncPendingQueue(); };
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     const pending = getOfflineQueue();
     setPendingSalesCount(pending.length);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
   }, []);
 
   useEffect(() => {
@@ -129,10 +169,15 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => { if (session && isOnline) fetchAllData(); }, [session, isOnline]);
+  useEffect(() => { if (session && isOnline) fetchAllData(); }, [session, isOnline, adminViewBranch]);
 
   const handleCashierLogin = async (cashier) => {
     try {
+      if (cashier.role === 'admin' || cashier.role === 'manager') {
+        setActiveCashier(cashier);
+        setCurrentView('Dashboard'); 
+        return;
+      }
       const { data, error } = await supabase.from('shifts').select('*').eq('cashier_name', cashier.username).eq('status', 'open').order('start_time', { ascending: false }).limit(1);
       if (data && data.length > 0) {
         setActiveShift(data[0]); setActiveCashier(cashier); setCurrentView('Menu');
@@ -159,42 +204,133 @@ function App() {
   };
 
   const prepareEndShift = async () => {
-    const { data: shiftSales } = await supabase.from('sales').select('total_amount').gte('created_at', activeShift.start_time);
-    const totalSales = shiftSales ? shiftSales.reduce((s, sale) => s + Number(sale.total_amount), 0) : 0;
-    const expectedTotal = Number(activeShift.starting_cash) + totalSales;
-    setShiftSalesAmount(totalSales); setShiftExpectedCash(expectedTotal); setShowEndShift(true);
+    const loc = localStorage.getItem('tallybrew_branch');
+    const effectiveBranch = loc === 'admin_remote' ? adminViewBranch : loc;
+
+    const { data: shiftSales } = await supabase.from('sales')
+      .select('*')
+      .gte('created_at', activeShift.start_time)
+      .eq('branch_id', effectiveBranch);
+
+    let totalSales = 0;
+    let cashSales = 0;
+    let gcashSales = 0;
+    let discountCount = 0;
+
+    if (shiftSales) {
+      shiftSales.forEach(sale => {
+        const amount = Number(sale.total_amount || 0);
+        totalSales += amount;
+        
+        if (sale.payment_method === 'GCash') {
+          gcashSales += amount;
+        } else {
+          cashSales += amount;
+        }
+
+        if (sale.items_summary && sale.items_summary.includes('(w/')) {
+          discountCount++;
+        }
+      });
+    }
+
+    const expectedCash = Number(activeShift.starting_cash) + cashSales;
+
+    setShiftStats({
+       totalSales,
+       cashSales,
+       gcashSales,
+       discountCount,
+       expectedCash,
+       startingCash: Number(activeShift.starting_cash),
+       transactions: shiftSales ? shiftSales.length : 0,
+       startTime: activeShift.start_time
+    });
+
+    setShowEndShift(true);
   };
 
   const closeRegister = async () => {
     const actual = parseFloat(endingCashInput) || 0;
-    const shortage = actual - shiftExpectedCash; 
-    await supabase.from('shifts').update({ end_time: new Date().toISOString(), expected_cash: shiftExpectedCash, actual_cash: actual, shortage: shortage, status: 'closed' }).eq('id', activeShift.id);
-    setShowEndShift(false); setEndingCashInput(""); setActiveShift(null); setActiveCashier(null); window.location.reload(); 
+    const shortage = actual - shiftStats.expectedCash; 
+    const endTime = new Date().toISOString();
+
+    await supabase.from('shifts').update({ 
+      end_time: endTime, 
+      expected_cash: shiftStats.expectedCash, 
+      actual_cash: actual, 
+      shortage: shortage, 
+      status: 'closed' 
+    }).eq('id', activeShift.id);
+    
+    setShiftStats(prev => ({ ...prev, actualCash: actual, shortage, endTime }));
+    setShowEndShift(false); 
+    setShowShiftReport(true); 
+  };
+
+  // --- UPGRADED: Smart Logo Print Function ---
+  const handlePrintZReading = () => {
+    const printContent = document.getElementById('printable-z-read').innerHTML;
+    
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Z-Reading</title>
+          <style>
+            @page { margin: 0; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              padding: 15px; 
+              margin: 0;
+              color: #000;
+              width: 270px; /* Standard 80mm thermal paper width */
+            }
+          </style>
+        </head>
+        <body>
+          ${printContent}
+          <script>
+            // Tell the browser to wait for the TallyBrew logo to download before opening the print menu!
+            window.onload = function() {
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 250);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+  };
+
+  const finalizeShiftAndLogout = () => {
+    setShowShiftReport(false);
+    setEndingCashInput(""); 
+    setActiveShift(null); 
+    setActiveCashier(null); 
+    window.location.reload(); 
   };
 
   const handleItemClick = (product) => {
-    if (['Snacks', 'Rice Meals', 'Add-on', 'Milk'].includes(product.category)) {
-      addToCart(product);
-      return;
-    }
+    if (['Snacks', 'Rice Meals', 'Add-on', 'Milk'].includes(product.category)) { addToCart(product); return; }
     setModifierModal({ isOpen: true, product: product, size: 'Regular', milk: 'Whole', addons: [] });
   };
 
   const toggleAddon = (addonObj) => {
     setModifierModal(prev => {
       const exists = prev.addons.find(a => a.id === addonObj.id);
-      return {
-        ...prev,
-        addons: exists ? prev.addons.filter(a => a.id !== addonObj.id) : [...prev.addons, addonObj]
-      };
+      return { ...prev, addons: exists ? prev.addons.filter(a => a.id !== addonObj.id) : [...prev.addons, addonObj] };
     });
   };
 
   const confirmModifiersAndAddToCart = () => {
     const { product, size, milk, addons } = modifierModal;
-    let extraPrice = 0;
-    let modLabels = [];
-    const mergedRecipe = [];
+    let extraPrice = 0; let modLabels = []; const mergedRecipe = [];
 
     const addRecipeItems = (recipeStr, multiplier = 1) => {
       if (!recipeStr || !recipeStr.startsWith('[')) return;
@@ -203,54 +339,32 @@ function App() {
         items.forEach(item => {
           const existing = mergedRecipe.find(r => r.id === item.id);
           const scaledQty = Number(item.qty) * multiplier;
-          if (existing) { existing.qty = Number(existing.qty) + scaledQty; } 
-          else { mergedRecipe.push({ ...item, qty: scaledQty }); }
+          if (existing) { existing.qty = Number(existing.qty) + scaledQty; } else { mergedRecipe.push({ ...item, qty: scaledQty }); }
         });
       } catch(e) {}
     };
 
     const sizeMultiplier = size === 'Large' ? 1.5 : 1;
     if (size === 'Large') { extraPrice += 20; modLabels.push('Lrg'); }
-    
     addRecipeItems(product.recipe, sizeMultiplier);
 
     if (milk !== 'Whole') {
       const selectedMilkObj = availableMilks.find(m => m.name === milk);
       if (selectedMilkObj) {
-        extraPrice += Number(selectedMilkObj.price);
-        modLabels.push(selectedMilkObj.name);
-        
-        const milkIngredientIds = inventory
-          .filter(ing => ing.name.toLowerCase().includes('milk') && !ing.name.toLowerCase().includes(selectedMilkObj.name.toLowerCase()))
-          .map(ing => ing.id);
-          
-        for (let i = mergedRecipe.length - 1; i >= 0; i--) {
-          if (milkIngredientIds.includes(mergedRecipe[i].id)) {
-            mergedRecipe.splice(i, 1);
-          }
-        }
+        extraPrice += Number(selectedMilkObj.price); modLabels.push(selectedMilkObj.name);
+        const milkIngredientIds = inventory.filter(ing => ing.name.toLowerCase().includes('milk') && !ing.name.toLowerCase().includes(selectedMilkObj.name.toLowerCase())).map(ing => ing.id);
+        for (let i = mergedRecipe.length - 1; i >= 0; i--) { if (milkIngredientIds.includes(mergedRecipe[i].id)) { mergedRecipe.splice(i, 1); } }
         addRecipeItems(selectedMilkObj.recipe, sizeMultiplier); 
       }
     }
     
-    addons.forEach(a => {
-      extraPrice += Number(a.price);
-      modLabels.push('+' + a.name);
-      addRecipeItems(a.recipe, 1); 
-    });
+    addons.forEach(a => { extraPrice += Number(a.price); modLabels.push('+' + a.name); addRecipeItems(a.recipe, 1); });
 
     const finalPrice = Number(product.price) + extraPrice;
     const modifierString = modLabels.length > 0 ? ` (${modLabels.join(', ')})` : '';
     const uniqueId = `${product.id}-${size}-${milk}-${addons.map(a=>a.id).sort().join('-')}`;
 
-    addToCart({ 
-      ...product, 
-      id: uniqueId, 
-      name: `${product.name}${modifierString}`, 
-      price: finalPrice,
-      recipe: JSON.stringify(mergedRecipe) 
-    });
-    
+    addToCart({ ...product, id: uniqueId, name: `${product.name}${modifierString}`, price: finalPrice, recipe: JSON.stringify(mergedRecipe) });
     setModifierModal({ isOpen: false, product: null, size: 'Regular', milk: 'Whole', addons: [] });
   };
 
@@ -262,117 +376,88 @@ function App() {
     });
   };
 
-  const updateQty = (id, amount) => {
-    setCart(prev => prev.map(item => item.id === id ? { ...item, qty: item.qty + amount } : item).filter(i => i.qty > 0));
-  };
+  const updateQty = (id, amount) => { setCart(prev => prev.map(item => item.id === id ? { ...item, qty: item.qty + amount } : item).filter(i => i.qty > 0)); };
 
   const processOrderToSupabase = async (orderPackage) => {
     const { data: newSale, error: saleError } = await supabase.from('sales').insert([orderPackage.sale]).select().single();
     if (saleError) throw saleError;
+    
+    const loc = localStorage.getItem('tallybrew_branch');
+    const effectiveBranch = loc === 'admin_remote' ? adminViewBranch : loc;
+
+    const getLocalInventoryId = async (globalInvId) => {
+      const { data: origItem } = await supabase.from('inventory').select('name').eq('id', globalInvId).single();
+      if (!origItem) return null;
+      const { data: localItem } = await supabase.from('inventory').select('id, stock_qty').eq('name', origItem.name).eq('branch_id', effectiveBranch).single();
+      return localItem ? { id: localItem.id, stock_qty: localItem.stock_qty } : null;
+    };
 
     for (const cartItem of orderPackage.cart) {
       const nameParts = cartItem.name.split(' (');
       const baseName = nameParts[0];
       const modifiers = nameParts.length > 1 ? '(' + nameParts[1] : '';
 
-      await supabase.from('sale_items').insert([{
-        sale_id: newSale.id, 
-        product_name: baseName,
-        quantity: cartItem.qty,
-        unit_price: cartItem.price,
-        total_price: cartItem.price * cartItem.qty,
-        modifiers: modifiers
-      }]);
+      await supabase.from('sale_items').insert([{ sale_id: newSale.id, product_name: baseName, quantity: cartItem.qty, unit_price: cartItem.price, total_price: cartItem.price * cartItem.qty, modifiers: modifiers }]);
 
-      // =========================================================================
-      // NEW: RELATIONAL RECIPE DEDUCTION (Subtracts main ingredients)
-      // Because modifiers change the cartItem.id (e.g., "36-Large-Whole"), we extract the original base ID:
       const baseProductId = cartItem.id.toString().split('-')[0];
       const drinkRecipe = recipes.filter(r => r.menu_item_id.toString() === baseProductId);
       
       for (const ingredient of drinkRecipe) {
         const amountToDeduct = Number(ingredient.quantity_required) * cartItem.qty;
-        
-        const { data: ingData } = await supabase.from('inventory').select('stock_qty').eq('id', ingredient.inventory_item_id).single();
-        if (ingData) {
-          const newQty = Number(ingData.stock_qty) - amountToDeduct;
-          await supabase.from('inventory').update({ stock_qty: newQty }).eq('id', ingredient.inventory_item_id);
+        const localIng = await getLocalInventoryId(ingredient.inventory_item_id);
+        if (localIng) {
+          const newQty = Number(localIng.stock_qty) - amountToDeduct;
+          await supabase.from('inventory').update({ stock_qty: newQty }).eq('id', localIng.id);
         }
       }
-      // =========================================================================
 
-      // =========================================================================
-      // EXISTING: JSON RECIPE DEDUCTION (Kept safe for your Add-ons/Milks logic!)
       if (cartItem.recipe && cartItem.recipe.startsWith('[')) {
         try {
           const recipeList = JSON.parse(cartItem.recipe);
           for (const req of recipeList) {
-            const { data: ing } = await supabase.from('inventory').select('stock_qty').eq('id', req.id).single();
-            if (ing) {
-              const newQty = Number(ing.stock_qty) - (Number(req.qty) * Number(cartItem.qty));
-              await supabase.from('inventory').update({ stock_qty: newQty }).eq('id', req.id);
+            const localIng = await getLocalInventoryId(req.id);
+            if (localIng) {
+              const newQty = Number(localIng.stock_qty) - (Number(req.qty) * Number(cartItem.qty));
+              await supabase.from('inventory').update({ stock_qty: newQty }).eq('id', localIng.id);
             }
           }
-        } catch(e) { console.error("Error parsing recipe", e) }
+        } catch(e) {}
       }
-      // =========================================================================
     }
   };
 
   const syncPendingQueue = async () => {
     const pending = getOfflineQueue();
     if (pending.length === 0) return;
-
     let remainingQueue = [];
     for (const order of pending) {
-      try {
-        await processOrderToSupabase(order);
-      } catch (err) {
-        remainingQueue.push(order); 
-      }
+      try { await processOrderToSupabase(order); } catch (err) { remainingQueue.push(order); }
     }
-
     localStorage.setItem('tallybrew_offline_queue', JSON.stringify(remainingQueue));
     setPendingSalesCount(remainingQueue.length);
-    
-    if (remainingQueue.length === 0) {
-      fetchAllData(); 
-    }
+    if (remainingQueue.length === 0) fetchAllData(); 
   };
 
   const confirmPaymentAndSave = async (method, receivedAmount, customerName, orderType) => {
     const subtotal = cart.reduce((s, i) => s + (i.price * i.qty), 0);
     const finalTotal = subtotal * (1 - discount.rate);
+    const loc = localStorage.getItem('tallybrew_branch');
+    const effectiveBranch = loc === 'admin_remote' ? adminViewBranch : loc;
     
     let itemsList = cart.map(item => `${item.qty}x ${item.name}`).join(', ');
     let summary = `[${orderType.toUpperCase()}] ${customerName || 'Guest'} - ${itemsList}`;
     if (discount.rate > 0) summary += ` (w/ ${discount.label} Discount)`;
 
     const orderPackage = {
-      sale: { 
-        total_amount: finalTotal, 
-        items_count: cart.length, 
-        items_summary: summary, 
-        payment_method: method,
-        created_at: new Date().toISOString() 
-      },
+      sale: { total_amount: finalTotal, items_count: cart.length, items_summary: summary, payment_method: method, branch_id: effectiveBranch, created_at: new Date().toISOString() },
       cart: [...cart]
     };
 
     if (isOnline) {
-      try {
-        await processOrderToSupabase(orderPackage);
-        fetchAllData(); 
-      } catch (err) { 
-        saveOffline(orderPackage);
-      }
-    } else {
-      saveOffline(orderPackage);
-    }
+      try { await processOrderToSupabase(orderPackage); fetchAllData(); } catch (err) { saveOffline(orderPackage); }
+    } else { saveOffline(orderPackage); }
 
-    setIsCheckoutOpen(false); 
-    setCart([]); 
-    setDiscount({ label: 'No Discount', rate: 0 }); 
+    setIsCheckoutOpen(false); setCart([]); setDiscount({ label: 'No Discount', rate: 0 }); 
   };
 
   const saveOffline = (orderPackage) => {
@@ -414,9 +499,7 @@ function App() {
     } catch (err) { alert("System Error."); setManagerPinInput(""); }
   };
 
-  const performDeleteProduct = async (id) => {
-    try { await supabase.from('products').delete().eq('id', id); fetchAllData(); } catch (error) { alert("Error: " + error.message); }
-  };
+  const performDeleteProduct = async (id) => { try { await supabase.from('products').delete().eq('id', id); fetchAllData(); } catch (error) { alert("Error: " + error.message); } };
 
   const addProduct = async (formData, selectedFile) => {
     try {
@@ -435,7 +518,12 @@ function App() {
   };
 
   const addIngredient = async (formData) => {
-    try { await supabase.from('inventory').insert([{ name: formData.name, stock_qty: parseFloat(formData.stock_qty), unit: formData.unit }]); fetchAllData(); setIsAddIngredientOpen(false); } catch (error) { alert("Error: " + error.message); }
+    try { 
+      const loc = localStorage.getItem('tallybrew_branch');
+      const effectiveBranch = loc === 'admin_remote' ? adminViewBranch : loc;
+      await supabase.from('inventory').insert([{ name: formData.name, stock_qty: parseFloat(formData.stock_qty), unit: formData.unit, branch_id: effectiveBranch }]); 
+      fetchAllData(); setIsAddIngredientOpen(false); 
+    } catch (error) { alert("Error: " + error.message); }
   };
 
   const handleManualRestock = async (id, newStock, invoiceData) => {
@@ -454,9 +542,17 @@ function App() {
 
   if (!session) return showLanding ? <LandingPage onLoginClick={() => setShowLanding(false)} /> : <Auth />;
   
+  if (isKitchenKiosk) {
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f3f4f6', display: 'flex', flexDirection: 'column', zIndex: 9999 }}>
+        <button onClick={() => { setIsKitchenKiosk(false); localStorage.removeItem('tallybrew_kiosk'); }} style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10000, padding: '12px 20px', borderRadius: '12px', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>← Exit Kitchen Mode</button>
+        <KitchenDisplay />
+      </div>
+    );
+  }
+
   const availableAddons = menuItems.filter(item => item.category === 'Add-on');
   const availableMilks = menuItems.filter(item => item.category === 'Milk');
-  
   const displayedItems = activeCategory === 'All' ? menuItems.filter(i => i.category !== 'Add-on' && i.category !== 'Milk') : menuItems;
 
   const previewExtraCost = () => {
@@ -474,90 +570,49 @@ function App() {
   return (
     <>
       {(!isOnline || pendingSalesCount > 0) && (
-        <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10000, background: isOnline ? '#10b981' : '#ef4444', color: '#fff', padding: '10px 20px', borderRadius: '30px', fontWeight: '800', fontSize: '14px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: '8px', animation: 'popIn 0.3s' }}>
-          {isOnline ? (
-             <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Syncing {pendingSalesCount} Orders...</>
-          ) : (
-             <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> Offline Mode ({pendingSalesCount} Pending)</>
-          )}
+        <div className="no-print" style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10000, background: isOnline ? '#10b981' : '#ef4444', color: '#fff', padding: '10px 20px', borderRadius: '30px', fontWeight: '800', fontSize: '14px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: '8px', animation: 'popIn 0.3s' }}>
+          {isOnline ? ( <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Syncing {pendingSalesCount} Orders...</> ) : ( <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> Offline Mode ({pendingSalesCount} Pending)</> )}
+        </div>
+      )}
+
+      {activeLocation === 'admin_remote' && currentView !== 'Dashboard' && empireBranches.length > 0 && (
+        <div className="no-print" style={{ position: 'absolute', top: '30px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#3B2213', padding: '12px 25px', borderRadius: '30px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 10px 25px rgba(59,34,19,0.3)', border: '2px solid #E6D0A9', animation: 'popIn 0.3s' }}>
+           <span style={{color: '#E6D0A9', fontWeight: '900', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px'}}>📍 Editing:</span>
+           <select value={adminViewBranch || ''} onChange={(e) => setAdminViewBranch(e.target.value)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '16px', fontWeight: '900', outline: 'none', cursor: 'pointer', textAlign: 'center' }}>
+              {empireBranches.map(b => <option key={b.id} value={b.id} style={{color: '#111'}}>{b.name}</option>)}
+           </select>
         </div>
       )}
 
       {!activeCashier && !showStartShift ? (
-        <CashierLock onUnlock={handleCashierLogin} />
+        <div className="no-print"><CashierLock onUnlock={handleCashierLogin} onLaunchKitchen={() => { setIsKitchenKiosk(true); localStorage.setItem('tallybrew_kiosk', 'true'); }} /></div>
       ) : activeCashier ? (
         
-        <div className="pos-container" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', backgroundColor: '#f3f4f6', overflow: 'hidden', padding: 0, margin: 0 }}>
+        <div className="pos-container no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', backgroundColor: '#f3f4f6', overflow: 'hidden', padding: 0, margin: 0 }}>
           
-          {/* HAMBURGER BUTTON FOR MOBILE */}
           <button className="mobile-nav-toggle" onClick={() => setIsMobileNavOpen(true)}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
 
-          {/* DARK OVERLAY WHEN SIDEBAR IS OPEN ON MOBILE */}
           <div className={`sidebar-overlay ${isMobileNavOpen ? 'open' : ''}`} onClick={() => setIsMobileNavOpen(false)}></div>
 
-          <Sidebar 
-            currentView={currentView} 
-            setCurrentView={handleNavigationRequest} 
-            activeCashier={activeCashier} 
-            isMobileNavOpen={isMobileNavOpen}
-            setIsMobileNavOpen={setIsMobileNavOpen}
-          />
+          <Sidebar currentView={currentView} setCurrentView={handleNavigationRequest} activeCashier={activeCashier} isMobileNavOpen={isMobileNavOpen} setIsMobileNavOpen={setIsMobileNavOpen} />
           
           <div className="main-content" style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
-            
-            {currentView === 'Dashboard' && (
-              <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}>
-                <Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} />
-              </div>
-            )}
-
-            {/* ---> HERE IS THE NEW KITCHEN VIEW <--- */}
-            {currentView === 'Kitchen' && (
-              <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}>
-                <KitchenDisplay />
-              </div>
-            )}
-            
+            {currentView === 'Dashboard' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}><Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} /></div>}
+            {currentView === 'Kitchen' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}><KitchenDisplay /></div>}
             {currentView === 'Menu' && (
               <>
-                <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-                  <Menu 
-                    menuItems={displayedItems} 
-                    categories={categories} 
-                    activeCategory={activeCategory} 
-                    setActiveCategory={setActiveCategory} 
-                    addToCart={handleItemClick} 
-                    onManageClick={() => setIsAddProductOpen(true)} 
-                    deleteProduct={requestDeleteProduct} 
-                    editProduct={setEditingProduct} 
-                    inventory={inventory} 
-                    recipes={recipes} 
-                  />
+                <div style={{ flex: 1, height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}>
+                  <Menu menuItems={displayedItems} categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} addToCart={handleItemClick} onManageClick={() => setIsAddProductOpen(true)} deleteProduct={requestDeleteProduct} editProduct={setEditingProduct} inventory={inventory} recipes={recipes} />
                 </div>
-                
-                {cart.length > 0 ? (
-                  <Cart cart={cart} updateQty={updateQty} total={cart.reduce((s, i) => s + (i.price * i.qty), 0)} handleCheckout={() => cart.length > 0 && setIsCheckoutOpen(true)} discount={discount} onOpenDiscount={requestAddDiscount} />
-                ) : null}
+                {cart.length > 0 && <Cart cart={cart} updateQty={updateQty} total={cart.reduce((s, i) => s + (i.price * i.qty), 0)} handleCheckout={() => cart.length > 0 && setIsCheckoutOpen(true)} discount={discount} onOpenDiscount={requestAddDiscount} />}
               </>
             )}
-
-            {currentView === 'Inventory' && (
-              <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}>
-                <Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} />
-              </div>
-            )}
-
-            {currentView === 'Settings' && (
-              <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}>
-                <Settings activeCashier={activeCashier} activeShift={activeShift} onPrepareEndShift={requestEndShift} />
-              </div>
-            )}
-
+            {currentView === 'Inventory' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}><Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} /></div>}
+            {currentView === 'Settings' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}><Settings activeCashier={activeCashier} activeShift={activeShift} onPrepareEndShift={requestEndShift} /></div>}
           </div>
         </div>
-        
       ) : null}
 
       {/* MODALS */}
@@ -569,20 +624,17 @@ function App() {
       {editingProduct && <EditProduct isOpen={!!editingProduct} onClose={() => setEditingProduct(null)} product={editingProduct} onUpdate={updateProduct} ingredients={inventory} categories={categories.filter(c => c !== 'All')} />}
       {isDiscountOpen && <DiscountModal onClose={() => setIsDiscountOpen(false)} applyDiscount={setDiscount} currentDiscount={discount} />}
 
+      {/* MODIFIER MODAL */}
       {modifierModal.isOpen && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ width: '420px', borderRadius: '32px', padding: '35px', backgroundColor: '#FDFBF7', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
-            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
               <div>
                 <h2 style={{ fontSize: '24px', fontWeight: '900', margin: '0 0 5px 0', color: '#3B2213', letterSpacing: '-0.5px' }}>Customize Order</h2>
-                <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#B56124' }}>
-                  {modifierModal.product.name} — ₱{(modifierModal.product.price + previewExtraCost()).toFixed(2)}
-                </p>
+                <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#B56124' }}>{modifierModal.product.name} — ₱{(modifierModal.product.price + previewExtraCost()).toFixed(2)}</p>
               </div>
               <button onClick={() => setModifierModal({ ...modifierModal, isOpen: false })} style={{ background: '#E6D0A9', border: 'none', width: '36px', height: '36px', borderRadius: '50%', color: '#3B2213', fontSize: '20px', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&times;</button>
             </div>
-
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: '900', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Size</label>
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -593,50 +645,34 @@ function App() {
                 ))}
               </div>
             </div>
-
             {!['americano', 'espresso'].some(keyword => modifierModal.product.name.toLowerCase().includes(keyword)) && (
               <div style={{ marginBottom: '25px' }}>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: '900', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Milk Option</label>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  <button onClick={() => setModifierModal({...modifierModal, milk: 'Whole'})} style={{ flex: 1, minWidth: '90px', padding: '10px 5px', borderRadius: '14px', border: modifierModal.milk === 'Whole' ? '2px solid #3B2213' : '2px solid #e5e7eb', background: modifierModal.milk === 'Whole' ? '#3B2213' : '#fff', color: modifierModal.milk === 'Whole' ? '#FDFBF7' : '#3B2213', fontWeight: '800', fontSize: '14px', cursor: 'pointer', transition: '0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <span>Whole</span>
-                  </button>
-
+                  <button onClick={() => setModifierModal({...modifierModal, milk: 'Whole'})} style={{ flex: 1, minWidth: '90px', padding: '10px 5px', borderRadius: '14px', border: modifierModal.milk === 'Whole' ? '2px solid #3B2213' : '2px solid #e5e7eb', background: modifierModal.milk === 'Whole' ? '#3B2213' : '#fff', color: modifierModal.milk === 'Whole' ? '#FDFBF7' : '#3B2213', fontWeight: '800', fontSize: '14px', cursor: 'pointer', transition: '0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}><span>Whole</span></button>
                   {availableMilks.map(milkObj => (
-                    <button key={milkObj.id} onClick={() => setModifierModal({...modifierModal, milk: milkObj.name})} style={{ flex: 1, minWidth: '90px', padding: '10px 5px', borderRadius: '14px', border: modifierModal.milk === milkObj.name ? '2px solid #3B2213' : '2px solid #e5e7eb', background: modifierModal.milk === milkObj.name ? '#3B2213' : '#fff', color: modifierModal.milk === milkObj.name ? '#FDFBF7' : '#3B2213', fontWeight: '800', fontSize: '14px', cursor: 'pointer', transition: '0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                      <span>{milkObj.name}</span>
-                      <span style={{ opacity: modifierModal.milk === milkObj.name ? 0.7 : 0.5, fontSize: '11px', marginTop: '2px' }}>(+₱{milkObj.price})</span>
-                    </button>
+                    <button key={milkObj.id} onClick={() => setModifierModal({...modifierModal, milk: milkObj.name})} style={{ flex: 1, minWidth: '90px', padding: '10px 5px', borderRadius: '14px', border: modifierModal.milk === milkObj.name ? '2px solid #3B2213' : '2px solid #e5e7eb', background: modifierModal.milk === milkObj.name ? '#3B2213' : '#fff', color: modifierModal.milk === milkObj.name ? '#FDFBF7' : '#3B2213', fontWeight: '800', fontSize: '14px', cursor: 'pointer', transition: '0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}><span>{milkObj.name}</span><span style={{ opacity: modifierModal.milk === milkObj.name ? 0.7 : 0.5, fontSize: '11px', marginTop: '2px' }}>(+₱{milkObj.price})</span></button>
                   ))}
                 </div>
               </div>
             )}
-
             <div style={{ marginBottom: '35px' }}>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: '900', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Add-Ons</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {availableAddons.length > 0 ? availableAddons.map(addon => {
                   const isActive = modifierModal.addons.find(a => a.id === addon.id);
                   return (
-                    <div key={addon.id} onClick={() => toggleAddon(addon)} style={{ display: 'flex', justifyContent: 'space-between', padding: '16px', borderRadius: '14px', border: isActive ? '2px solid #B56124' : '1px solid #e5e7eb', background: isActive ? '#FDFBF7' : '#fff', cursor: 'pointer', transition: '0.2s', boxShadow: isActive ? '0 0 0 1px #B56124' : 'none' }}>
-                      <span style={{ fontWeight: '800', color: '#3B2213', fontSize: '14px' }}>{addon.name}</span>
-                      <span style={{ fontWeight: '800', color: isActive ? '#B56124' : '#9ca3af', fontSize: '14px' }}>+₱{addon.price}</span>
-                    </div>
+                    <div key={addon.id} onClick={() => toggleAddon(addon)} style={{ display: 'flex', justifyContent: 'space-between', padding: '16px', borderRadius: '14px', border: isActive ? '2px solid #B56124' : '1px solid #e5e7eb', background: isActive ? '#FDFBF7' : '#fff', cursor: 'pointer', transition: '0.2s', boxShadow: isActive ? '0 0 0 1px #B56124' : 'none' }}><span style={{ fontWeight: '800', color: '#3B2213', fontSize: '14px' }}>{addon.name}</span><span style={{ fontWeight: '800', color: isActive ? '#B56124' : '#9ca3af', fontSize: '14px' }}>+₱{addon.price}</span></div>
                   );
-                }) : (
-                  <p style={{ fontSize: '13px', color: '#6b7280', margin: 0, fontStyle: 'italic' }}>No add-ons created yet. Add them in the Manage section.</p>
-                )}
+                }) : ( <p style={{ fontSize: '13px', color: '#6b7280', margin: 0, fontStyle: 'italic' }}>No add-ons created yet. Add them in the Manage section.</p> )}
               </div>
             </div>
-
-            <button onClick={confirmModifiersAndAddToCart} style={{ width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#B56124', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer', boxShadow: '0 8px 20px rgba(181, 97, 36, 0.25)', transition: '0.2s' }}>
-              Add to Order — ₱{(modifierModal.product.price + previewExtraCost()).toFixed(2)}
-            </button>
-            
+            <button onClick={confirmModifiersAndAddToCart} style={{ width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#B56124', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer', boxShadow: '0 8px 20px rgba(181, 97, 36, 0.25)', transition: '0.2s' }}>Add to Order — ₱{(modifierModal.product.price + previewExtraCost()).toFixed(2)}</button>
           </div>
         </div>
       )}
 
+      {/* SHIFT ENTRY MODAL */}
       {showStartShift && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ width: '420px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
@@ -659,30 +695,21 @@ function App() {
         </div>
       )}
 
-      {showEndShift && (
+      {/* SHIFT CLOSE MODAL */}
+      {showEndShift && shiftStats && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ width: '420px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
             <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#B56124" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
             </div>
             <h2 style={{ fontSize: '26px', fontWeight: '900', margin: '0 0 10px', color: '#3B2213', letterSpacing: '-0.5px' }}>Close Register</h2>
-            <p style={{ color: '#3B2213', fontSize: '14px', marginBottom: '25px', fontWeight: '600', opacity: 0.8 }}>
-              Count the physical cash in the drawer to close <strong>{activeCashier?.username}</strong>'s shift.
-            </p>
+            <p style={{ color: '#3B2213', fontSize: '14px', marginBottom: '25px', fontWeight: '600', opacity: 0.8 }}>Count the physical cash in the drawer to close <strong>{activeCashier?.username}</strong>'s shift.</p>
             <div style={{ background: '#F5E8D2', border: '2px solid #3B2213', borderRadius: '16px', padding: '15px 20px', marginBottom: '25px', textAlign: 'left' }}>
-               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '700', opacity: 0.8 }}>Starting Float:</span>
-                  <span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '800' }}>₱ {Number(activeShift?.starting_cash || 0).toFixed(2)}</span>
-               </div>
-               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '700', opacity: 0.8 }}>Shift Sales:</span>
-                  <span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '800' }}>+ ₱ {shiftSalesAmount.toFixed(2)}</span>
-               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '700', opacity: 0.8 }}>Starting Float:</span><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '800' }}>₱ {shiftStats.startingCash.toFixed(2)}</span></div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '700', opacity: 0.8 }}>Cash Sales:</span><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '800' }}>+ ₱ {shiftStats.cashSales.toFixed(2)}</span></div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{ fontSize: '12px', color: '#3B2213', fontWeight: '600', opacity: 0.6 }}>GCash Sales (Not in drawer):</span><span style={{ fontSize: '12px', color: '#3B2213', fontWeight: '600', opacity: 0.6 }}>₱ {shiftStats.gcashSales.toFixed(2)}</span></div>
                <div style={{ height: '2px', background: '#3B2213', opacity: 0.2, margin: '12px 0' }}></div>
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '15px', color: '#B56124', fontWeight: '900', textTransform: 'uppercase' }}>Total Expected:</span>
-                  <span style={{ fontSize: '20px', color: '#B56124', fontWeight: '900' }}>₱ {shiftExpectedCash.toFixed(2)}</span>
-               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '15px', color: '#B56124', fontWeight: '900', textTransform: 'uppercase' }}>Expected Cash:</span><span style={{ fontSize: '20px', color: '#B56124', fontWeight: '900' }}>₱ {shiftStats.expectedCash.toFixed(2)}</span></div>
             </div>
             <div style={{ position: 'relative', width: '100%', marginBottom: '30px', textAlign: 'left', background: '#FDFBF7', borderRadius: '16px', border: '2px solid #B56124', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 0 0 3px rgba(181,97,36,0.2)' }}>
               <div style={{ flex: 1 }}>
@@ -692,8 +719,59 @@ function App() {
             </div>
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={() => setShowEndShift(false)} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#FDFBF7', color: '#3B2213', fontWeight: '900', fontSize: '15px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={closeRegister} disabled={!endingCashInput} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#3B2213', color: '#FDFBF7', fontWeight: '900', fontSize: '15px', cursor: !endingCashInput ? 'not-allowed' : 'pointer', opacity: !endingCashInput ? 0.6 : 1, boxShadow: '0 4px 12px rgba(59,34,19,0.3)' }}>End Shift & Lock</button>
+              <button onClick={closeRegister} disabled={!endingCashInput} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#3B2213', color: '#FDFBF7', fontWeight: '900', fontSize: '15px', cursor: !endingCashInput ? 'not-allowed' : 'pointer', opacity: !endingCashInput ? 0.6 : 1, boxShadow: '0 4px 12px rgba(59,34,19,0.3)' }}>Generate Report</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- UPDATED: PRINTABLE Z-READING RECEIPT MODAL W/ LOGO --- */}
+      {showShiftReport && shiftStats && (
+        <div className="popup-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ width: '380px', borderRadius: '24px', padding: '30px', textAlign: 'center', backgroundColor: '#fff', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s', display: 'flex', flexDirection: 'column' }}>
+             
+             {/* The Actual Receipt Content */}
+             <div id="printable-z-read" style={{ color: '#000', marginBottom: '20px' }}>
+                <div style={{ textAlign: 'center', marginBottom: '15px' }}>
+                  <img 
+                    src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
+                    alt="TallyBrew Logo" 
+                    style={{ width: '130px', display: 'block', margin: '0 auto 10px', filter: 'grayscale(100%) contrast(200%)' }} 
+                  />
+                  <h3 style={{ margin: '0 0 10px', fontSize: '18px', borderBottom: '1px dashed #000', paddingBottom: '10px' }}>Z-READING REPORT</h3>
+                </div>
+                
+                <div style={{ textAlign: 'left' }}>
+                  <p style={{ margin: '4px 0', fontSize: '14px' }}><strong>Cashier:</strong> {activeCashier?.username}</p>
+                  <p style={{ margin: '4px 0', fontSize: '14px' }}><strong>Start:</strong> {new Date(shiftStats.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                  <p style={{ margin: '4px 0', fontSize: '14px' }}><strong>End:</strong> {new Date(shiftStats.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Transactions:</span><span>{shiftStats.transactions}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Discounts Applied:</span><span>{shiftStats.discountCount}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>GCash Sales:</span><span>₱ {shiftStats.gcashSales.toFixed(2)}</span></div>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Starting Float:</span><span>₱ {shiftStats.startingCash.toFixed(2)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Cash Sales:</span><span>+ ₱ {shiftStats.cashSales.toFixed(2)}</span></div>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '8px 0', fontSize: '16px', fontWeight: 'bold' }}><span>EXPECTED CASH:</span><span>₱ {shiftStats.expectedCash.toFixed(2)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '8px 0', fontSize: '16px', fontWeight: 'bold' }}><span>ACTUAL COUNT:</span><span>₱ {shiftStats.actualCash.toFixed(2)}</span></div>
+                  <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '8px 0', fontSize: '18px', fontWeight: 'bold', color: '#000' }}>
+                     <span>{shiftStats.shortage < 0 ? 'SHORTAGE:' : (shiftStats.shortage > 0 ? 'OVERAGE:' : 'BALANCED:')}</span>
+                     <span>₱ {Math.abs(shiftStats.shortage).toFixed(2)}</span>
+                  </div>
+                  <div style={{ textAlign: 'center', marginTop: '30px', fontSize: '12px' }}>End of Report</div>
+                </div>
+             </div>
+
+             <div className="no-print" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button onClick={handlePrintZReading} style={{ flex: 1, padding: '16px', borderRadius: '12px', border: '2px solid #3B2213', backgroundColor: '#fff', color: '#3B2213', fontWeight: '900', cursor: 'pointer', fontSize: '15px' }}>🖨️ Print Receipt</button>
+                <button onClick={finalizeShiftAndLogout} style={{ flex: 1, padding: '16px', borderRadius: '12px', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontWeight: '900', cursor: 'pointer', fontSize: '15px' }}>Lock Terminal</button>
+             </div>
           </div>
         </div>
       )}

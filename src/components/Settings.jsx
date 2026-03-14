@@ -10,6 +10,14 @@ export default function Settings({ activeCashier, activeShift, onPrepareEndShift
   const [shiftLogs, setShiftLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
+  // --- NEW: Branch Management States ---
+  const [branches, setBranches] = useState([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [newBranchName, setNewBranchName] = useState('');
+  const [newBranchLocation, setNewBranchLocation] = useState('');
+  const [branchStatusMsg, setBranchStatusMsg] = useState('');
+  const [isBranchError, setIsBranchError] = useState(false);
+
   const isAdmin = activeCashier?.role === 'admin' || activeCashier?.role === 'manager';
 
   const formattedStartTime = activeShift 
@@ -19,6 +27,8 @@ export default function Settings({ activeCashier, activeShift, onPrepareEndShift
   useEffect(() => {
     if (activeTab === 'history' && isAdmin) {
       fetchShiftLogs();
+    } else if (activeTab === 'locations' && isAdmin) {
+      fetchBranches();
     }
   }, [activeTab, isAdmin]);
 
@@ -32,6 +42,14 @@ export default function Settings({ activeCashier, activeShift, onPrepareEndShift
       
     if (data) setShiftLogs(data);
     setLoadingLogs(false);
+  };
+
+  // --- NEW: Fetch Branches ---
+  const fetchBranches = async () => {
+    setLoadingBranches(true);
+    const { data, error } = await supabase.from('branches').select('*').order('name');
+    if (data) setBranches(data);
+    setLoadingBranches(false);
   };
 
   const handleUpdatePin = async (e) => {
@@ -60,6 +78,34 @@ export default function Settings({ activeCashier, activeShift, onPrepareEndShift
     }
   };
 
+  // --- NEW: Handle Adding a Branch ---
+  const handleAddBranch = async (e) => {
+    e.preventDefault();
+    if (!newBranchName.trim()) {
+      setIsBranchError(true);
+      setBranchStatusMsg("Branch Name is required.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('branches')
+        .insert([{ name: newBranchName, location: newBranchLocation }]);
+
+      if (error) throw error;
+
+      setIsBranchError(false);
+      setBranchStatusMsg(`Success! ${newBranchName} is now live.`);
+      setNewBranchName('');
+      setNewBranchLocation('');
+      fetchBranches(); // Instantly refresh the list
+      setTimeout(() => setBranchStatusMsg(''), 4000);
+    } catch (err) {
+      setIsBranchError(true);
+      setBranchStatusMsg("Error: Could not add branch. Name might already exist.");
+    }
+  };
+
   const formatMoney = (amount) => {
     return `₱ ${Number(amount).toFixed(2)}`;
   };
@@ -67,7 +113,6 @@ export default function Settings({ activeCashier, activeShift, onPrepareEndShift
   return (
     <div style={{ padding: '40px', backgroundColor: '#FDFBF7', minHeight: '100vh', width: '100%', fontFamily: "'Inter', sans-serif" }}>
       
-      {/* ADDED textAlign: 'left' HERE */}
       <div style={{ marginBottom: '30px', textAlign: 'left' }}>
         <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>
           Account Settings
@@ -77,28 +122,37 @@ export default function Settings({ activeCashier, activeShift, onPrepareEndShift
         </p>
       </div>
 
-      {/* TABS - ADDED justifyContent: 'flex-start' */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '30px', borderBottom: '2px solid #e5e7eb', marginBottom: '30px' }}>
+      {/* TABS */}
+      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '30px', borderBottom: '2px solid #e5e7eb', marginBottom: '30px', overflowX: 'auto' }}>
         <div 
           onClick={() => setActiveTab('shift')}
-          style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', color: activeTab === 'shift' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'shift' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+          style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'shift' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'shift' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
         >
           My Shift
         </div>
         <div 
           onClick={() => setActiveTab('security')}
-          style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', color: activeTab === 'security' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'security' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+          style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'security' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'security' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
         >
           Security PIN
         </div>
         
         {isAdmin && (
-          <div 
-            onClick={() => setActiveTab('history')}
-            style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', color: activeTab === 'history' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'history' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
-          >
-            Shift History (Admin)
-          </div>
+          <>
+            <div 
+              onClick={() => setActiveTab('history')}
+              style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'history' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'history' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+            >
+              Shift History
+            </div>
+            {/* --- NEW TAB: Manage Locations --- */}
+            <div 
+              onClick={() => setActiveTab('locations')}
+              style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'locations' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'locations' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+            >
+              Manage Locations (Admin)
+            </div>
+          </>
         )}
       </div>
 
@@ -246,6 +300,90 @@ export default function Settings({ activeCashier, activeShift, onPrepareEndShift
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* --- NEW TAB 4: MANAGE LOCATIONS --- */}
+      {activeTab === 'locations' && isAdmin && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', animation: 'fadeIn 0.3s ease-out', textAlign: 'left' }}>
+          
+          {/* Active Locations List */}
+          <div style={{ background: '#fff', borderRadius: '24px', padding: '35px', boxShadow: '0 10px 30px rgba(59, 34, 19, 0.05)' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0' }}>Active Branches</h2>
+            <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '25px', fontWeight: '500' }}>All TallyBrew physical store locations.</p>
+            
+            {loadingBranches ? (
+              <p style={{ color: '#B56124', fontWeight: '700' }}>Loading locations...</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                {branches.map(branch => (
+                  <div key={branch.id} style={{ display: 'flex', alignItems: 'center', padding: '20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginRight: '15px' }}>
+                      📍
+                    </div>
+                    <div>
+                      <div style={{ color: '#3B2213', fontWeight: '900', fontSize: '16px' }}>{branch.name}</div>
+                      <div style={{ color: '#B56124', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>{branch.location || 'No address set'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add New Branch Form */}
+          <div style={{ background: '#fff', borderRadius: '24px', padding: '35px', boxShadow: '0 10px 30px rgba(59, 34, 19, 0.05)', height: 'fit-content' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0' }}>Expand the Empire</h2>
+            <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '25px', fontWeight: '500' }}>Register a new store location to the database.</p>
+            
+            {branchStatusMsg && (
+              <div style={{ background: isBranchError ? '#fef2f2' : '#ecfdf5', color: isBranchError ? '#dc2626' : '#059669', padding: '14px 18px', borderRadius: '12px', fontSize: '13px', fontWeight: '800', marginBottom: '20px', border: `1px solid ${isBranchError ? '#fecaca' : '#a7f3d0'}` }}>
+                {branchStatusMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleAddBranch} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#B56124', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Branch Name
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="e.g., TallyBrew - Annex" 
+                  value={newBranchName} 
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  style={{ width: '100%', padding: '16px 20px', boxSizing: 'border-box', background: '#FDFBF7', border: '2px solid #E6D0A9', borderRadius: '16px', fontSize: '15px', fontWeight: '600', color: '#3B2213', outline: 'none', transition: 'border-color 0.2s' }}
+                  onFocus={(e) => e.target.style.borderColor = '#B56124'} 
+                  onBlur={(e) => e.target.style.borderColor = '#E6D0A9'} 
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#B56124', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Physical Location (Optional)
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="e.g., North Mall, Ground Floor" 
+                  value={newBranchLocation} 
+                  onChange={(e) => setNewBranchLocation(e.target.value)}
+                  style={{ width: '100%', padding: '16px 20px', boxSizing: 'border-box', background: '#FDFBF7', border: '2px solid #E6D0A9', borderRadius: '16px', fontSize: '15px', fontWeight: '600', color: '#3B2213', outline: 'none', transition: 'border-color 0.2s' }}
+                  onFocus={(e) => e.target.style.borderColor = '#B56124'} 
+                  onBlur={(e) => e.target.style.borderColor = '#E6D0A9'} 
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={!newBranchName.trim()}
+                style={{ padding: '18px', borderRadius: '16px', border: 'none', background: '#B56124', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: !newBranchName.trim() ? 'not-allowed' : 'pointer', opacity: !newBranchName.trim() ? 0.6 : 1, transition: '0.2s', boxShadow: '0 8px 15px rgba(181, 97, 36, 0.2)', marginTop: '10px' }}
+              >
+                + Add New Branch
+              </button>
+            </form>
+          </div>
+
         </div>
       )}
 

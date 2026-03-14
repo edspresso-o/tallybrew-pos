@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient'; // NEW: Imported to fetch the branch name
 
 export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart, discount }) {
   const [receivedAmount, setReceivedAmount] = useState('');
@@ -11,11 +12,24 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
   const [gcashReference, setGcashReference] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState(null);
 
-  // Load the saved QR code when the modal opens
+  // --- NEW: Store the actual text name of the branch ---
+  const [branchName, setBranchName] = useState('');
+
+  // Load the saved QR code and Branch Name when the modal opens
   useEffect(() => {
     if (isOpen) {
       const savedQr = localStorage.getItem('tallybrew_gcash_qr');
       if (savedQr) setQrCodeUrl(savedQr);
+
+      // Fetch the branch name for the receipt header
+      const fetchBranchName = async () => {
+        const activeBranchId = localStorage.getItem('tallybrew_branch');
+        if (activeBranchId && activeBranchId !== 'admin_remote') {
+          const { data } = await supabase.from('branches').select('name').eq('id', activeBranchId).single();
+          if (data) setBranchName(data.name);
+        }
+      };
+      fetchBranchName();
     }
   }, [isOpen]);
 
@@ -214,7 +228,15 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
         <div style={{ backgroundColor: '#fff', padding: '0', borderRadius: '12px', width: '380px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)', animation: 'popIn 0.3s', overflow: 'hidden' }}>
           <div id="receipt-core" style={{ padding: '40px 30px', borderBottom: '2px dashed #e5e7eb', background: '#fff' }}>
             <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <img src={`${import.meta.env.BASE_URL}images/TallyBrewPos.png`} alt="TallyBrew Logo" style={{ maxWidth: '180px', width: '100%', height: 'auto', margin: '0 auto 10px auto', display: 'block' }} />
+              <img src={`${import.meta.env.BASE_URL}images/TallyBrewPos.png`} alt="TallyBrew Logo" style={{ maxWidth: '180px', width: '100%', height: 'auto', margin: '0 auto 5px auto', display: 'block' }} />
+              
+              {/* --- NEW: Injected the dynamic Branch Name --- */}
+              {branchName && (
+                <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#111', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  {branchName}
+                </p>
+              )}
+
               <p style={{ margin: 0, fontSize: '12px', color: '#444', fontWeight: '600' }}>{new Date().toLocaleString()}</p>
               <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#444', fontWeight: '600' }}>Order: {orderType === 'dine-in' ? 'DINE IN' : 'TAKE OUT'}</p>
               {customerName && <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#444', fontWeight: '600' }}>Customer: {customerName}</p>}

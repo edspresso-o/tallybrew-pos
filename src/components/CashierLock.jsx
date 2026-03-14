@@ -8,12 +8,28 @@ export default function CashierLock({ onUnlock }) {
   const [error, setError] = useState('');
   const [isShaking, setIsShaking] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  
+  // --- NEW: Loading state so we don't get stuck on empty branches! ---
+  const [isLoading, setIsLoading] = useState(true); 
 
   useEffect(() => {
     const fetchCashiers = async () => {
-      const { data } = await supabase.from('profiles').select('*').order('username');
+      setIsLoading(true);
+      const activeBranch = localStorage.getItem('tallybrew_branch');
+      let query = supabase.from('profiles').select('*').order('username');
+      
+      if (activeBranch === 'admin_remote') {
+        query = query.in('role', ['admin', 'manager']);
+      } else if (activeBranch) {
+        query = query.eq('branch_id', activeBranch);
+      }
+
+      const { data } = await query;
       if (data) setCashiers(data);
+      
+      setIsLoading(false); // Tell the app we are done searching!
     };
+    
     fetchCashiers();
   }, []);
 
@@ -45,22 +61,30 @@ export default function CashierLock({ onUnlock }) {
     }
   };
 
+  // --- NEW: Escape Hatch if stuck in an empty branch ---
+  const handleEmergencyLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('tallybrew_branch');
+    window.location.reload();
+  };
+
   const renderLogo = () => {
     if (!logoError) {
       return (
         <img 
-  src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
-  alt="TallyBrew Logo" 
-  style={{ 
-    maxWidth: '400px', 
-    width: '100%', 
-    height: 'auto', 
-    marginBottom: '-50', /* Changed from -80px to push the box down a bit */
-    marginTop: '0vh',
-    position: 'relative',
-    zIndex: 1
-  }} 
-/>
+          src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
+          alt="TallyBrew Logo" 
+          style={{ 
+            maxWidth: '400px', 
+            width: '100%', 
+            height: 'auto', 
+            marginBottom: '-50px', 
+            marginTop: '0vh',
+            position: 'relative',
+            zIndex: 1
+          }} 
+          onError={() => setLogoError(true)}
+        />
       );
     }
     return (
@@ -70,17 +94,16 @@ export default function CashierLock({ onUnlock }) {
     );
   };
 
-  if (cashiers.length === 0) return (
+  // Only show the loading screen if we are ACTUALLY loading
+  if (isLoading) return (
     <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FDFBF7' }}>
       <h2 style={{ color: '#B56124', fontFamily: "'Inter', sans-serif" }}>Loading Terminal...</h2>
     </div>
   );
 
   return (
-    // UPDATED: Removed "justifyContent: center" to stop the weird gaps, and added specific padding to top
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', minHeight: '100vh', backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif", paddingTop: '50px', paddingBottom: '20px', overflowY: 'auto' }}>
       
-      {/* --- UI ANIMATIONS & STYLES --- */}
       <style>{`
         @keyframes lockShake {
           0%, 100% { transform: translateX(0); }
@@ -104,41 +127,54 @@ export default function CashierLock({ onUnlock }) {
         .bottom-link:hover { opacity: 0.6; }
       `}</style>
 
-      {/* 1. TALLYBREW LOGO - Fixed to the top with a controlled margin */}
       <div style={{ animation: 'fadeIn 0.4s ease-out', marginBottom: '35px' }}>
         {renderLogo()}
       </div>
 
-      {/* 2. BEIGE LOCK CARD */}
       <div className={isShaking ? 'shake-animation' : ''} style={{ background: '#E6D0A9', borderRadius: '32px', padding: '30px 25px', width: '100%', maxWidth: '380px', boxShadow: '0 15px 35px rgba(59, 34, 19, 0.1)', animation: 'fadeIn 0.5s ease-out' }}>
         
-        {/* --- VIEW 1: SELECT USER --- */}
         {!selectedCashier ? (
           <>
             <div style={{ textAlign: 'center', marginBottom: '25px' }}>
-              <h2 style={{ color: '#B56124', fontSize: '24px', fontWeight: '900', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>Select User</h2>
+              <h2 style={{ color: '#B56124', fontSize: '24px', fontWeight: '900', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>
+                {localStorage.getItem('tallybrew_branch') === 'admin_remote' ? 'Admin Access' : 'Select User'}
+              </h2>
               <p style={{ color: '#3B2213', fontSize: '13px', margin: 0, fontWeight: '600', opacity: 0.8 }}>Tap your profile to sign in.</p>
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '15px' }}>
-              {cashiers.map(c => (
-                <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '85px' }}>
-                  <div 
-                    className="user-circle" 
-                    onClick={() => setSelectedCashier(c)}
-                    style={{ width: '65px', height: '65px', borderRadius: '50%', background: c.role === 'manager' || c.role === 'admin' ? '#B56124' : '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: '900', boxShadow: '0 6px 12px rgba(59, 34, 19, 0.1)' }}
-                  >
-                    {c.username.charAt(0).toUpperCase()}
+            {/* --- NEW: Empty State Logic --- */}
+            {cashiers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '10px' }}>
+                <p style={{ color: '#dc2626', fontSize: '14px', fontWeight: '800', marginBottom: '25px', lineHeight: '1.4' }}>
+                  No staff members are assigned to this store location yet.
+                </p>
+                <button 
+                  onClick={handleEmergencyLogout}
+                  style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59, 34, 19, 0.2)' }}
+                >
+                  Sign Out & Go Back
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '15px' }}>
+                {cashiers.map(c => (
+                  <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '85px' }}>
+                    <div 
+                      className="user-circle" 
+                      onClick={() => setSelectedCashier(c)}
+                      style={{ width: '65px', height: '65px', borderRadius: '50%', background: c.role === 'manager' || c.role === 'admin' ? '#B56124' : '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: '900', boxShadow: '0 6px 12px rgba(59, 34, 19, 0.1)' }}
+                    >
+                      {c.username.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ color: '#3B2213', fontWeight: '800', fontSize: '13px', marginTop: '8px' }}>{c.username}</div>
+                    <div style={{ color: '#B56124', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>{c.role}</div>
                   </div>
-                  <div style={{ color: '#3B2213', fontWeight: '800', fontSize: '13px', marginTop: '8px' }}>{c.username}</div>
-                  <div style={{ color: '#B56124', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>{c.role}</div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </>
         ) : (
 
-          /* --- VIEW 2: PIN ENTRY --- */
           <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
             <div style={{ textAlign: 'center', marginBottom: '15px' }}>
               <div style={{ width: '50px', height: '50px', margin: '0 auto 10px', borderRadius: '50%', background: selectedCashier.role === 'manager' || selectedCashier.role === 'admin' ? '#B56124' : '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: '900', boxShadow: '0 8px 15px rgba(59,34,19,0.2)' }}>

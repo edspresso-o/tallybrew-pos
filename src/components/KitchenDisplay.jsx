@@ -4,43 +4,69 @@ import { supabase } from '../supabaseClient';
 export default function KitchenDisplay() {
   const [activeOrders, setActiveOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [branchName, setBranchName] = useState('');
+  const [errorMessage, setErrorMessage] = useState(null); // Prevents the white screen!
 
-  // Fetch pending orders and their items
+  // Fetch the specific text name of the branch for the header
+  useEffect(() => {
+    const fetchBranchName = async () => {
+      try {
+        const activeBranchId = localStorage.getItem('tallybrew_branch');
+        if (activeBranchId && activeBranchId !== 'admin_remote') {
+          const { data } = await supabase.from('branches').select('name').eq('id', activeBranchId).single();
+          if (data) setBranchName(data.name);
+        } else if (activeBranchId === 'admin_remote') {
+          setBranchName('Global View (Admin)');
+        }
+      } catch (err) {
+        console.error("Branch fetch error", err);
+      }
+    };
+    fetchBranchName();
+  }, []);
+
+  // Fetch pending orders safely
   const fetchOrders = async () => {
     try {
-      // We use Supabase's ability to fetch a sale AND its matching sale_items at the same time
-      const { data, error } = await supabase
+      const activeBranchId = localStorage.getItem('tallybrew_branch');
+
+      // We only select 'sales' to prevent relational database crashes
+      let query = supabase
         .from('sales')
-        .select(`
-          *,
-          sale_items (*)
-        `)
+        .select('*')
         .eq('status', 'pending')
-        .order('created_at', { ascending: true }); // Oldest orders first!
+        .order('created_at', { ascending: true }); 
+
+      // Apply the branch filter
+      if (activeBranchId && activeBranchId !== 'admin_remote') {
+        query = query.eq('branch_id', activeBranchId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
+      
       setActiveOrders(data || []);
+      setErrorMessage(null); // Clear errors if successful
     } catch (error) {
       console.error("Error fetching kitchen orders:", error);
+      setErrorMessage("Could not load orders from the database.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Set up an auto-refresh so the screen updates every 5 seconds!
+  // Auto-refresh every 5 seconds
   useEffect(() => {
     fetchOrders();
     const interval = setInterval(fetchOrders, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // When the barista finishes making the drinks
   const markAsComplete = async (saleId) => {
     try {
-      // Optimistic UI update (instantly remove from screen for a snappy feel)
       setActiveOrders(prev => prev.filter(order => order.id !== saleId));
 
-      // Tell the database it's done
       const { error } = await supabase
         .from('sales')
         .update({ status: 'completed' })
@@ -49,31 +75,44 @@ export default function KitchenDisplay() {
       if (error) throw error;
     } catch (error) {
       console.error("Error completing order:", error);
-      fetchOrders(); // Re-fetch if it failed
+      fetchOrders(); 
     }
   };
 
-  // Format the time so the barista knows how long the customer has been waiting
   const formatTime = (dateString) => {
+    if (!dateString) return "Time Unknown";
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  if (loading) return <div style={{ padding: '20px', textAlign: 'center', fontWeight: 'bold' }}>Loading Kitchen Display...</div>;
+  // Safe ID display
+  const displayId = (id) => {
+    if (!id) return "N/A";
+    return String(id).slice(0, 8);
+  };
+
+  if (loading) return <div style={{ padding: '40px', textAlign: 'center', fontWeight: '900', color: '#B56124', fontSize: '20px' }}>Loading Kitchen Display...</div>;
 
   return (
     <div style={{ padding: '20px', flex: 1, width: '100%', boxSizing: 'border-box', backgroundColor: '#e5e7eb', minHeight: '100vh', overflowY: 'auto' }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ fontSize: '32px', fontWeight: '900', margin: 0, color: '#111', letterSpacing: '-1px' }}>
-          Kitchen Display
+          Kitchen Display {branchName && <span style={{ color: '#B56124', fontSize: '24px' }}>— {branchName}</span>}
         </h1>
         <div style={{ background: '#b85e2b', color: 'white', padding: '8px 16px', borderRadius: '20px', fontWeight: 'bold' }}>
           {activeOrders.length} Pending Orders
         </div>
       </div>
 
-      {activeOrders.length === 0 ? (
+      {/* NEW: Error Boundary display so it never white-screens again */}
+      {errorMessage && (
+        <div style={{ background: '#fef2f2', color: '#dc2626', padding: '20px', borderRadius: '16px', marginBottom: '20px', fontWeight: 'bold', border: '2px solid #fecaca' }}>
+          ⚠️ {errorMessage}
+        </div>
+      )}
+
+      {activeOrders.length === 0 && !errorMessage ? (
         <div style={{ textAlign: 'center', padding: '50px', backgroundColor: 'white', borderRadius: '16px', color: '#9ca3af', fontWeight: 'bold', fontSize: '20px' }}>
           No pending orders.
         </div>
@@ -83,11 +122,10 @@ export default function KitchenDisplay() {
           {activeOrders.map(order => (
             <div key={order.id} style={{ backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' }}>
               
-              {/* Order Header (Looks like a printed ticket header) */}
               <div style={{ backgroundColor: '#fdfbf7', borderBottom: '2px dashed #e5e7eb', padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '12px', fontWeight: '900', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                    Order #{order.id}
+                    Order #{displayId(order.id)}
                   </div>
                   <div style={{ fontSize: '18px', fontWeight: '900', color: '#3b2213' }}>
                     {formatTime(order.created_at)}
@@ -100,33 +138,25 @@ export default function KitchenDisplay() {
                 )}
               </div>
 
-              {/* Order Items List */}
               <div style={{ padding: '15px', flex: 1 }}>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                  {order.sale_items && order.sale_items.map(item => (
-                    <li key={item.id} style={{ marginBottom: '12px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px' }}>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                        <div style={{ backgroundColor: '#f3f4f6', padding: '4px 10px', borderRadius: '6px', fontWeight: '900', color: '#3b2213' }}>
-                          {item.quantity}x
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '16px', fontWeight: '800', color: '#111' }}>
-                            {item.product_name}
-                          </div>
-                          {/* If there are modifiers like Size or Add-ons, show them in red so the barista doesn't miss them! */}
-                          {item.modifiers && (
-                            <div style={{ fontSize: '13px', fontWeight: '800', color: '#ef4444', marginTop: '4px' }}>
-                              {item.modifiers}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
+                  {/* Safely split the receipt text to show items */}
+                  {order.items_summary ? (
+                    order.items_summary.split(' - ').length > 1 ? (
+                      order.items_summary.split(' - ')[1].split(', ').map((itemText, idx) => (
+                        <li key={idx} style={{ marginBottom: '12px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px', fontSize: '16px', fontWeight: '800', color: '#111' }}>
+                          {itemText}
+                        </li>
+                      ))
+                    ) : (
+                      <li style={{ color: '#111', fontWeight: 'bold' }}>{order.items_summary}</li>
+                    )
+                  ) : (
+                    <li style={{ color: '#9ca3af', fontStyle: 'italic' }}>No items listed.</li>
+                  )}
                 </ul>
               </div>
 
-              {/* Complete Button */}
               <button 
                 onClick={() => markAsComplete(order.id)}
                 style={{ width: '100%', padding: '20px', backgroundColor: '#3b2213', color: 'white', border: 'none', fontSize: '16px', fontWeight: '900', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px', transition: 'background-color 0.2s' }}

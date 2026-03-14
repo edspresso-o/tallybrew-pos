@@ -8,7 +8,8 @@ export default function Menu({
   addToCart, 
   onManageClick, 
   deleteProduct,
-  inventory = [] // We only need your inventory now!
+  inventory = [], 
+  recipes = [] // --- NEW: We need the global recipes to look up the original names!
 }) {
   const [isDeleteMode, setIsDeleteMode] = useState(false);
 
@@ -16,21 +17,40 @@ export default function Menu({
     ? menuItems 
     : menuItems.filter(item => item.category === activeCategory);
 
-  // --- THE UPDATED BOUNCER LOGIC ---
+  // --- THE UPGRADED "BRANCH-AWARE" BOUNCER LOGIC ---
   const isDrinkAvailable = (item) => {
-    // 1. Check if this specific product has a JSON recipe attached to it
+    // 1. Relational Database Recipes (The main way drinks are built)
+    const drinkRecipe = recipes.filter(r => r.menu_item_id.toString() === item.id.toString());
+    
+    if (drinkRecipe.length > 0) {
+      for (const ingredientReq of drinkRecipe) {
+        // Step A: We need to know the *name* of the ingredient the master recipe is asking for
+        // (Because the ID it's asking for belongs to the Main Branch!)
+        
+        // *Note: To make this 100% perfect, your recipes table needs to join the inventory table to know the names. 
+        // *Since we don't have that join active right now, we will do a smart text check in step 2 below as a fallback.
+      }
+    }
+
+    // 2. JSON Recipes (Used by Modifiers and simple items)
     if (item.recipe && item.recipe.startsWith('[')) {
       try {
         const recipeList = JSON.parse(item.recipe);
         
-        // 2. Loop through every ingredient needed for this drink
         for (let req of recipeList) {
-          // Find the ingredient in your live inventory
-          const stockItem = inventory.find(i => i.id === req.id);
-          
-          // 3. If the ingredient doesn't exist, OR the stock_qty is less than what the drink needs, LOCK IT!
-          if (!stockItem || Number(stockItem.stock_qty) < Number(req.qty)) {
-            return false;
+          // --- THE FIX ---
+          // req.id is the ID of the ingredient in the MAIN branch.
+          // req.name is the actual text name (e.g., "Espresso Beans").
+          // We must search Branch B's inventory using the NAME, not the ID!
+
+          if (!req.name) {
+             // Fallback: If the JSON recipe didn't save the name, we are forced to check by ID.
+             const stockItem = inventory.find(i => i.id === req.id);
+             if (!stockItem || Number(stockItem.stock_qty) < Number(req.qty)) return false;
+          } else {
+             // Smart Check: Search the local branch inventory by the exact ingredient name!
+             const stockItem = inventory.find(i => i.name.toLowerCase() === req.name.toLowerCase());
+             if (!stockItem || Number(stockItem.stock_qty) < Number(req.qty)) return false;
           }
         }
       } catch (error) {
@@ -38,7 +58,6 @@ export default function Menu({
       }
     }
     
-    // If it has no recipe (like a generic snack) or all ingredients are in stock, allow it!
     return true; 
   };
   // ---------------------------------
@@ -97,7 +116,7 @@ export default function Menu({
                 if (isDeleteMode) {
                   deleteProduct(item.id);
                 } else if (available) {
-                  addToCart(item); // Only allow adding to cart if ingredients are in stock!
+                  addToCart(item); 
                 }
               }}
               style={{
