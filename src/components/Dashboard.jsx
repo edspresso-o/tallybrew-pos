@@ -110,16 +110,33 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
   const maxChartValue = Math.max(...weeklyChartData.map(d => d.total), 1);
 
-  // --- UPGRADED EXECUTIVE EXPORT FUNCTION ---
+  // --- UPGRADED, HIGHLY ORGANIZED EXECUTIVE EXPORT ---
   const handleExport = () => {
     const avgOrderValue = ordersServed > 0 ? (totalSales / ordersServed) : 0;
     const totalItemsSold = filteredSales.reduce((sum, s) => sum + Number(s.items_count || 0), 0);
     
-    // Payment Metrics
-    const cashSales = filteredSales.filter(s => s.payment_method === 'Cash' || !s.payment_method).reduce((sum, s) => sum + Number(s.total_amount), 0);
-    const gcashSales = filteredSales.filter(s => s.payment_method === 'GCash').reduce((sum, s) => sum + Number(s.total_amount), 0);
-    const cashPct = totalSales > 0 ? ((cashSales / totalSales) * 100).toFixed(1) : 0;
-    const gcashPct = totalSales > 0 ? ((gcashSales / totalSales) * 100).toFixed(1) : 0;
+    // Exact Payment Metrics (Using our new database columns if they exist)
+    let totalCashReceived = 0;
+    let totalGCashReceived = 0;
+
+    filteredSales.forEach(s => {
+      const amount = Number(s.total_amount || 0);
+      const cAmt = Number(s.cash_amount || 0);
+      const gAmt = Number(s.gcash_amount || 0);
+
+      // Backwards compatibility for old sales
+      if (s.payment_method === 'GCash' && cAmt === 0 && gAmt === 0) {
+        totalGCashReceived += amount;
+      } else if (s.payment_method === 'Cash' && cAmt === 0 && gAmt === 0) {
+        totalCashReceived += amount;
+      } else {
+        totalCashReceived += cAmt;
+        totalGCashReceived += gAmt;
+      }
+    });
+
+    const cashPct = totalSales > 0 ? ((totalCashReceived / totalSales) * 100).toFixed(1) : 0;
+    const gcashPct = totalSales > 0 ? ((totalGCashReceived / totalSales) * 100).toFixed(1) : 0;
     
     // Order Type Metrics
     let dineInCount = 0;
@@ -135,7 +152,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       if (summary.includes('TAKEOUT') || summary.includes('TAKE-OUT')) takeoutCount++;
       if (summary.includes('(w/')) discountedOrders++;
 
-      // Safely parse items for the top seller list
       if (s.items_summary) {
         let pureItems = s.items_summary.replace(/\[.*?\]\s*/g, '').replace(/\(w\/.*?Discount\)/g, '');
         const splitCustomer = pureItems.split(' - ');
@@ -152,50 +168,57 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       }
     });
 
-    // Sort items by highest quantity sold
     const sortedTopItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
-
     const branchName = selectedBranch === 'All' ? 'ALL BRANCHES' : (branches.find(b => b.id === selectedBranch)?.name || 'STORE');
 
-    let csvContent = '\uFEFF'; 
-    csvContent += `======================================================================\n`;
-    csvContent += `TALLYBREW POS - EXECUTIVE BUSINESS REPORT\n`;
-    csvContent += `======================================================================\n\n`;
+    // Helper function to escape CSV cells
+    const escapeCSV = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    // Build the CSV string blocks for beautiful Excel layout
+    let csv = '\uFEFF'; 
     
-    csvContent += `[ REPORT DETAILS ]\n`;
-    csvContent += `Location:,${branchName.toUpperCase()}\n`;
-    csvContent += `Report Period:,${timeFilter.toUpperCase()}\n`;
-    csvContent += `Generated On:,${new Date().toLocaleString()}\n\n`;
+    // 1. Header Block
+    csv += "TALLYBREW POS - MASTER EXECUTIVE REPORT,,,,,\n";
+    csv += `Generated On:,${escapeCSV(new Date().toLocaleString())},,,,\n`;
+    csv += `Location Filter:,${escapeCSV(branchName.toUpperCase())},,,,\n`;
+    csv += `Time Filter:,${escapeCSV(timeFilter.toUpperCase())},,,,\n`;
+    csv += ",,,,,\n"; // Blank line
 
-    csvContent += `[ EXECUTIVE SUMMARY ]\n`;
-    csvContent += `Metric,Value\n`;
-    csvContent += `Total Gross Revenue,PHP ${totalSales.toFixed(2)}\n`;
-    csvContent += `Total Transactions,${ordersServed}\n`;
-    csvContent += `Average Order Value (AOV),PHP ${avgOrderValue.toFixed(2)}\n`;
-    csvContent += `Total Items Sold,${totalItemsSold} Items\n`;
-    csvContent += `Dine-In Orders,${dineInCount}\n`;
-    csvContent += `Take-Out Orders,${takeoutCount}\n`;
-    csvContent += `Orders w/ Discounts,${discountedOrders}\n\n`;
+    // 2. Executive Summary Block
+    csv += "--- EXECUTIVE SUMMARY ---,,,,,\n";
+    csv += "Total Gross Revenue,Total Transactions,Avg Order Value,Total Items Sold,Dine-In Orders,Take-Out Orders,Discounted Orders\n";
+    csv += `${totalSales.toFixed(2)},${ordersServed},${avgOrderValue.toFixed(2)},${totalItemsSold},${dineInCount},${takeoutCount},${discountedOrders}\n`;
+    csv += ",,,,,\n"; 
 
-    csvContent += `[ REVENUE BY PAYMENT METHOD ]\n`;
-    csvContent += `Method,Total Revenue,Percentage\n`;
-    csvContent += `Cash,PHP ${cashSales.toFixed(2)},${cashPct}%\n`;
-    csvContent += `GCash,PHP ${gcashSales.toFixed(2)},${gcashPct}%\n\n`;
+    // 3. Payment Breakdown Block
+    csv += "--- REVENUE BY PAYMENT METHOD ---,,,,,\n";
+    csv += "Payment Method,Total Received (PHP),Percentage of Sales,,,\n";
+    csv += `Physical Cash,${totalCashReceived.toFixed(2)},${cashPct}%,,,\n`;
+    csv += `GCash Transfers,${totalGCashReceived.toFixed(2)},${gcashPct}%,,,\n`;
+    csv += ",,,,,\n";
 
-    csvContent += `[ BEST-SELLING ITEMS RANKING ]\n`;
-    csvContent += `Rank,Item Name,Quantity Sold\n`;
+    // 4. Product Performance Block
+    csv += "--- PRODUCT PERFORMANCE (ITEMS SOLD) ---,,,,,\n";
+    csv += "Rank,Item Name,Quantity Sold,,,\n";
     if (sortedTopItems.length === 0) {
-      csvContent += `-,No items sold in this period,-\n`;
+      csv += "-,No items sold in this period.,,,,\n";
     } else {
       sortedTopItems.forEach(([name, qty], index) => {
-        csvContent += `#${index + 1},"${name}",${qty}\n`;
+        csv += `${index + 1},${escapeCSV(name)},${qty},,,\n`;
       });
     }
-    csvContent += `\n`;
+    csv += ",,,,,\n";
 
-    // --- REVERTED TO SHOW ALL INVENTORY ITEMS ---
-    csvContent += `[ COMPLETE INVENTORY AUDIT ]\n`;
-    csvContent += `Branch,Item Name,Current Stock,Unit,Status\n`;
+    // 5. Inventory Status Block
+    csv += "--- COMPLETE INVENTORY AUDIT ---,,,,,\n";
+    csv += "Branch Location,Ingredient / Item Name,Current Stock Level,Unit,Status Warning\n";
     
     const sortedInventory = [...activeInventory].sort((a, b) => {
       const branchA = branches.find(br => br.id === a.branch_id)?.name || '';
@@ -208,27 +231,24 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
     sortedInventory.forEach(item => {
       const stock = Number(item.stock_qty || 0);
       let status = 'Healthy';
-      
-      if (stock <= 0) status = '❌ OUT OF STOCK';
-      else if (stock <= 10) status = '⚠ CRITICAL - RESTOCK NOW';
+      if (stock <= 0) status = 'OUT OF STOCK';
+      else if (stock <= 10) status = 'CRITICAL - RESTOCK NOW';
       else if (stock <= 30) status = 'Low Stock';
 
       const itemBranchName = branches.find(b => b.id === item.branch_id)?.name || 'Unknown';
-      
-      // Prints every item unconditionally
-      csvContent += `"${itemBranchName}","${item.name || 'Unknown'}",${stock},"${item.unit || ''}","${status}"\n`;
+      csv += `${escapeCSV(itemBranchName)},${escapeCSV(item.name)},${stock},${escapeCSV(item.unit)},${escapeCSV(status)}\n`;
     });
 
-    if (sortedInventory.length === 0) {
-      csvContent += `-,No inventory data available.,-\n`;
-    }
-    csvContent += `\n`;
+    if (sortedInventory.length === 0) csv += "-,No inventory data available.,,,,\n";
+    csv += ",,,,,\n";
 
-    csvContent += `[ COMPLETE TRANSACTION LOG ]\n`;
+    // 6. Detailed Master Ledger
+    csv += "--- MASTER TRANSACTION LEDGER ---,,,,,\n";
+    csv += "Branch,Date,Time,Order ID,Customer Name,Order Type,Primary Method,Total Amount (PHP),Cash Part (PHP),GCash Part (PHP),Discount Applied,Items Breakdown\n";
+    
     if (filteredSales.length === 0) {
-      csvContent += `No transactions found for this period.\n`;
+      csv += "No transactions found for this period.,,,,,\n";
     } else {
-      csvContent += `Branch,Date,Time,Order ID,Order Type,Customer Name,Payment Method,Amount (PHP),Discount Applied,Detailed Items\n`;
       const sortedSales = [...filteredSales].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
       sortedSales.forEach(s => {
@@ -268,32 +288,27 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
           pureItems = pureItems.replace(`(w/ ${discountType} Discount)`, '').trim();
         }
 
-        pureItems = pureItems.replace(/"/g, '""');
-        
         const saleBranchName = branches.find(b => b.id === s.branch_id)?.name || 'Unknown';
+        
+        // Exact cash split amounts
+        const amt = Number(s.total_amount || 0);
+        let cAmt = Number(s.cash_amount || 0);
+        let gAmt = Number(s.gcash_amount || 0);
+        
+        if (method === 'Cash' && cAmt === 0 && gAmt === 0) cAmt = amt;
+        if (method === 'GCash' && cAmt === 0 && gAmt === 0) gAmt = amt;
 
-        const row = [
-          `"${saleBranchName}"`,
-          `"${date}"`, 
-          `"${time}"`, 
-          `"${s.id}"`, 
-          `"${orderType}"`,
-          `"${customerName}"`,
-          `"${displayMethod}"`, 
-          Number(s.total_amount || 0).toFixed(2), 
-          `"${discountType}"`,
-          `"${pureItems}"`
-        ];
-        csvContent += row.join(",") + "\n";
+        csv += `${escapeCSV(saleBranchName)},${escapeCSV(date)},${escapeCSV(time)},${escapeCSV(s.id)},${escapeCSV(customerName)},${escapeCSV(orderType)},${escapeCSV(displayMethod)},${amt.toFixed(2)},${cAmt.toFixed(2)},${gAmt.toFixed(2)},${escapeCSV(discountType)},${escapeCSV(pureItems)}\n`;
       });
     }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // Trigger Download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     const safeDate = new Date().toISOString().split('T')[0];
     const safeBranch = branchName.replace(/\s+/g, '_');
-    link.download = `TallyBrew_ExecutiveReport_${safeBranch}_${timeFilter.replace(/\s+/g, '_')}_${safeDate}.csv`;
+    link.download = `TallyBrew_MasterLedger_${safeBranch}_${timeFilter.replace(/\s+/g, '_')}_${safeDate}.csv`;
     link.click();
   };
 

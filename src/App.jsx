@@ -90,7 +90,6 @@ function App() {
   const [shiftStats, setShiftStats] = useState(null);
   const [showShiftReport, setShowShiftReport] = useState(false);
 
-  // --- UPGRADED: Custom App Alert System ---
   const [appAlert, setAppAlert] = useState({ isOpen: false, type: 'error', message: '', onConfirm: null });
 
   const showAlert = (message, type = 'error') => {
@@ -102,7 +101,6 @@ function App() {
   };
 
   const closeAlert = () => setAppAlert({ ...appAlert, isOpen: false });
-  // -------------------------------------
 
   const [modifierModal, setModifierModal] = useState({
     isOpen: false,
@@ -258,6 +256,7 @@ function App() {
       const { data, error } = await supabase.from('shifts').insert([{ 
         cashier_name: pendingCashier.username, 
         starting_cash: cash,
+        cash_drops: 0,
         branch_id: effectiveBranch
       }]).select().single();
 
@@ -306,7 +305,8 @@ function App() {
       });
     }
 
-    const expectedCash = Number(activeShift.starting_cash) + cashSales;
+    // --- NEW: EXPECTED CASH INCLUDES THE DEDUCTION FOR SKIMMED CASH ---
+    const expectedCash = Number(activeShift.starting_cash) + cashSales - Number(activeShift.cash_drops || 0);
 
     setShiftStats({
        totalSales,
@@ -315,6 +315,7 @@ function App() {
        discountCount,
        expectedCash,
        startingCash: Number(activeShift.starting_cash),
+       cashDrops: Number(activeShift.cash_drops || 0), // Added cashDrops to shiftStats
        transactions: shiftSales ? shiftSales.length : 0,
        startTime: activeShift.start_time
     });
@@ -679,7 +680,14 @@ function App() {
 
           <div className={`sidebar-overlay ${isMobileNavOpen ? 'open' : ''}`} onClick={() => setIsMobileNavOpen(false)}></div>
 
-          <Sidebar currentView={currentView} setCurrentView={handleNavigationRequest} activeCashier={activeCashier} isMobileNavOpen={isMobileNavOpen} setIsMobileNavOpen={setIsMobileNavOpen} />
+          <Sidebar 
+            currentView={currentView} 
+            setCurrentView={handleNavigationRequest} 
+            activeCashier={activeCashier} 
+            isMobileNavOpen={isMobileNavOpen} 
+            setIsMobileNavOpen={setIsMobileNavOpen} 
+            activeShift={activeShift} 
+          />
           
           <div className="main-content" style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
             {currentView === 'Dashboard' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}><Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} /></div>}
@@ -693,7 +701,11 @@ function App() {
               </>
             )}
             {currentView === 'Inventory' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}><Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} /></div>}
-            {currentView === 'Settings' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}><Settings activeCashier={activeCashier} activeShift={activeShift} onPrepareEndShift={requestEndShift} branchId={effectiveBranch} /></div>}
+            
+            {/* --- PASSED ONUPDATESHIFT TO SETTINGS --- */}
+            {currentView === 'Settings' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}>
+              <Settings activeCashier={activeCashier} activeShift={activeShift} onUpdateShift={setActiveShift} onPrepareEndShift={requestEndShift} branchId={effectiveBranch} />
+            </div>}
           </div>
         </div>
       ) : null}
@@ -838,6 +850,15 @@ function App() {
             <div style={{ background: '#F5E8D2', border: '2px solid #3B2213', borderRadius: '16px', padding: '15px 20px', marginBottom: '25px', textAlign: 'left' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '700', opacity: 0.8 }}>Starting Float:</span><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '800' }}>₱ {shiftStats.startingCash.toFixed(2)}</span></div>
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '700', opacity: 0.8 }}>Cash Sales:</span><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '800' }}>+ ₱ {shiftStats.cashSales.toFixed(2)}</span></div>
+               
+               {/* --- SHOW SKIMMED CASH DEDUCTION --- */}
+               {shiftStats.cashDrops > 0 && (
+                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                   <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: '700', opacity: 0.8 }}>Cash Dropped (Skim):</span>
+                   <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: '800' }}>- ₱ {shiftStats.cashDrops.toFixed(2)}</span>
+                 </div>
+               )}
+
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{ fontSize: '12px', color: '#3B2213', fontWeight: '600', opacity: 0.6 }}>GCash Sales (Not in drawer):</span><span style={{ fontSize: '12px', color: '#3B2213', fontWeight: '600', opacity: 0.6 }}>₱ {shiftStats.gcashSales.toFixed(2)}</span></div>
                <div style={{ height: '2px', background: '#3B2213', opacity: 0.2, margin: '12px 0' }}></div>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: '15px', color: '#B56124', fontWeight: '900', textTransform: 'uppercase' }}>Expected Cash:</span><span style={{ fontSize: '20px', color: '#B56124', fontWeight: '900' }}>₱ {shiftStats.expectedCash.toFixed(2)}</span></div>
@@ -884,6 +905,12 @@ function App() {
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Starting Float:</span><span>₱ {shiftStats.startingCash.toFixed(2)}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Cash Sales:</span><span>+ ₱ {shiftStats.cashSales.toFixed(2)}</span></div>
+                  
+                  {/* --- SHOW SKIMMED CASH ON RECEIPT --- */}
+                  {shiftStats.cashDrops > 0 && (
+                     <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Cash Dropped (Skim):</span><span>- ₱ {shiftStats.cashDrops.toFixed(2)}</span></div>
+                  )}
+
                   <div style={{ borderBottom: '1px dashed #000', margin: '15px 0' }}></div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', margin: '8px 0', fontSize: '16px', fontWeight: 'bold' }}><span>EXPECTED CASH:</span><span>₱ {shiftStats.expectedCash.toFixed(2)}</span></div>

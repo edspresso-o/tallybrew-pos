@@ -2,172 +2,222 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 export default function KitchenDisplay() {
-  const [activeOrders, setActiveOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [branchName, setBranchName] = useState('');
-  const [errorMessage, setErrorMessage] = useState(null); // Prevents the white screen!
+  const [orders, setOrders] = useState([]);
+  const [now, setNow] = useState(new Date());
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch the specific text name of the branch for the header
-  useEffect(() => {
-    const fetchBranchName = async () => {
-      try {
-        const activeBranchId = localStorage.getItem('tallybrew_branch');
-        if (activeBranchId && activeBranchId !== 'admin_remote') {
-          const { data } = await supabase.from('branches').select('name').eq('id', activeBranchId).single();
-          if (data) setBranchName(data.name);
-        } else if (activeBranchId === 'admin_remote') {
-          setBranchName('Global View (Admin)');
-        }
-      } catch (err) {
-        console.error("Branch fetch error", err);
-      }
-    };
-    fetchBranchName();
-  }, []);
+  const activeBranch = localStorage.getItem('tallybrew_branch');
 
-  // Fetch pending orders safely
   const fetchOrders = async () => {
-    try {
-      const activeBranchId = localStorage.getItem('tallybrew_branch');
-
-      // We only select 'sales' to prevent relational database crashes
-      let query = supabase
-        .from('sales')
-        .select('*')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: true }); 
-
-      // Apply the branch filter
-      if (activeBranchId && activeBranchId !== 'admin_remote') {
-        query = query.eq('branch_id', activeBranchId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
+    let query = supabase
+      .from('sales')
+      .select('id, created_at, items_summary, kitchen_status')
+      .neq('kitchen_status', 'completed')
+      .order('created_at', { ascending: true });
       
-      setActiveOrders(data || []);
-      setErrorMessage(null); // Clear errors if successful
-    } catch (error) {
-      console.error("Error fetching kitchen orders:", error);
-      setErrorMessage("Could not load orders from the database.");
-    } finally {
-      setLoading(false);
+    if (activeBranch && activeBranch !== 'admin_remote') {
+      query = query.eq('branch_id', activeBranch);
     }
+
+    const { data, error } = await query;
+    if (data) {
+      setOrders(data);
+    }
+    setIsLoading(false);
   };
 
-  // Auto-refresh every 5 seconds
+  // Poll for new orders every 5 seconds
   useEffect(() => {
     fetchOrders();
     const interval = setInterval(fetchOrders, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  const markAsComplete = async (saleId) => {
-    try {
-      setActiveOrders(prev => prev.filter(order => order.id !== saleId));
+  // Update the live timers every 1 second
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-      const { error } = await supabase
-        .from('sales')
-        .update({ status: 'completed' })
-        .eq('id', saleId);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error("Error completing order:", error);
-      fetchOrders(); 
-    }
+  const markCompleted = async (id) => {
+    // Instantly remove from screen for a snappy feel
+    setOrders(prev => prev.filter(o => o.id !== id));
+    
+    // Update the database in the background
+    await supabase.from('sales').update({ kitchen_status: 'completed' }).eq('id', id);
   };
 
-  const formatTime = (dateString) => {
-    if (!dateString) return "Time Unknown";
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const getElapsedSeconds = (createdAt) => {
+    const diff = Math.floor((now - new Date(createdAt)) / 1000);
+    return diff > 0 ? diff : 0;
   };
 
-  // Safe ID display
-  const displayId = (id) => {
-    if (!id) return "N/A";
-    return String(id).slice(0, 8);
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  if (loading) return <div style={{ padding: '40px', textAlign: 'center', fontWeight: '900', color: '#B56124', fontSize: '20px' }}>Loading Kitchen Display...</div>;
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FDFBF7' }}>
+        <h2 style={{ color: '#B56124', fontFamily: "'Inter', sans-serif" }}>Loading Kitchen Display...</h2>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: '20px', flex: 1, width: '100%', boxSizing: 'border-box', backgroundColor: '#e5e7eb', minHeight: '100vh', overflowY: 'auto' }}>
+    <div style={{ padding: '40px', backgroundColor: '#FDFBF7', minHeight: '100%', width: '100%', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: '900', margin: 0, color: '#111', letterSpacing: '-1px' }}>
-          Kitchen Display {branchName && <span style={{ color: '#B56124', fontSize: '24px' }}>— {branchName}</span>}
-        </h1>
-        <div style={{ background: '#b85e2b', color: 'white', padding: '8px 16px', borderRadius: '20px', fontWeight: 'bold' }}>
-          {activeOrders.length} Pending Orders
+      <style>{`
+        @keyframes pulseUrgent {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+          50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .order-card { transition: all 0.3s ease; }
+      `}</style>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', textAlign: 'left' }}>
+        <div>
+          <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>
+            Kitchen Display
+          </h1>
+          <p style={{ color: '#6b7280', fontSize: '15px', margin: 0, fontWeight: '500' }}>
+            {orders.length} active {orders.length === 1 ? 'order' : 'orders'} in the queue.
+          </p>
+        </div>
+        <div style={{ fontSize: '24px', fontWeight: '900', color: '#B56124', background: '#F5E8D2', padding: '12px 20px', borderRadius: '16px', border: '2px solid #E6D0A9' }}>
+          {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </div>
       </div>
 
-      {/* NEW: Error Boundary display so it never white-screens again */}
-      {errorMessage && (
-        <div style={{ background: '#fef2f2', color: '#dc2626', padding: '20px', borderRadius: '16px', marginBottom: '20px', fontWeight: 'bold', border: '2px solid #fecaca' }}>
-          ⚠️ {errorMessage}
-        </div>
-      )}
-
-      {activeOrders.length === 0 && !errorMessage ? (
-        <div style={{ textAlign: 'center', padding: '50px', backgroundColor: 'white', borderRadius: '16px', color: '#9ca3af', fontWeight: 'bold', fontSize: '20px' }}>
-          No pending orders.
+      {orders.length === 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', opacity: 0.5 }}>
+           <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#3B2213" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '20px' }}>
+             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+           </svg>
+           <h2 style={{ color: '#3B2213', fontSize: '24px', fontWeight: '900' }}>All Caught Up!</h2>
+           <p style={{ color: '#3B2213', fontSize: '16px', fontWeight: '600' }}>The kitchen queue is empty.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-          
-          {activeOrders.map(order => (
-            <div key={order.id} style={{ backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' }}>
-              
-              <div style={{ backgroundColor: '#fdfbf7', borderBottom: '2px dashed #e5e7eb', padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: '900', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                    Order #{displayId(order.id)}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+          {orders.map((order) => {
+            const elapsed = getElapsedSeconds(order.created_at);
+            
+            // --- COLOR CODING LOGIC ---
+            let statusConfig = {
+              bg: '#fff',
+              border: '#E6D0A9',
+              timerColor: '#10b981', // Green
+              timerBg: '#ecfdf5',
+              animation: 'none'
+            };
+
+            if (elapsed >= 300) { // Over 5 minutes
+              statusConfig = {
+                bg: '#fef2f2',
+                border: '#ef4444',
+                timerColor: '#dc2626', // Red
+                timerBg: '#fee2e2',
+                animation: 'pulseUrgent 2s infinite'
+              };
+            } else if (elapsed >= 120) { // Over 2 minutes
+              statusConfig = {
+                bg: '#fffbeb',
+                border: '#f59e0b',
+                timerColor: '#d97706', // Orange
+                timerBg: '#fef3c7',
+                animation: 'none'
+              };
+            }
+
+            // Parse the items_summary (e.g., "[DINE-IN] John - 2x Latte, 1x Cookie")
+            const summaryParts = order.items_summary ? order.items_summary.split(' - ') : ['Unknown', 'No items'];
+            const headerInfo = summaryParts[0]; // "[DINE-IN] John"
+            const itemsList = summaryParts.length > 1 ? summaryParts.slice(1).join(' - ') : ''; // "2x Latte, 1x Cookie"
+            
+            // Split items by comma for cleaner rendering
+            const individualItems = itemsList.split(', ');
+
+            return (
+              <div 
+                key={order.id} 
+                className="order-card"
+                style={{ 
+                  background: statusConfig.bg, 
+                  border: `2px solid ${statusConfig.border}`, 
+                  borderRadius: '24px', 
+                  padding: '25px', 
+                  boxShadow: '0 10px 25px rgba(59,34,19,0.05)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  textAlign: 'left', // <-- FIXED: Forces everything inside to align left
+                  animation: `${statusConfig.animation}, fadeIn 0.3s ease-out`
+                }}
+              >
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `2px dashed ${statusConfig.border}`, paddingBottom: '15px', marginBottom: '15px' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#B56124', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Order #{order.id.toString().slice(0, 5)}
+                    </div>
+                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#3B2213', marginTop: '4px' }}>
+                      {headerInfo}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '18px', fontWeight: '900', color: '#3b2213' }}>
-                    {formatTime(order.created_at)}
+                  <div style={{ background: statusConfig.timerBg, color: statusConfig.timerColor, padding: '8px 12px', borderRadius: '12px', fontWeight: '900', fontSize: '16px', border: `1px solid ${statusConfig.border}` }}>
+                    {formatTime(elapsed)}
                   </div>
                 </div>
-                {order.items_summary && order.items_summary.includes('[DINE-IN]') ? (
-                   <span style={{ backgroundColor: '#3b82f6', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '900' }}>DINE-IN</span>
-                ) : (
-                   <span style={{ backgroundColor: '#10b981', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '900' }}>TAKE-OUT</span>
-                )}
+
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '10px', marginBottom: '25px', width: '100%' }}>
+                  {individualItems.map((itemStr, idx) => {
+                    // Extract qty to make it bold (e.g., "2x" from "2x Latte")
+                    const match = itemStr.match(/^(\d+x)\s+(.*)/);
+                    if (match) {
+                      return (
+                        <div key={idx} style={{ fontSize: '16px', color: '#3B2213', lineHeight: '1.4', textAlign: 'left', width: '100%' }}>
+                          <span style={{ fontWeight: '900', color: '#B56124', marginRight: '8px' }}>{match[1]}</span>
+                          <span style={{ fontWeight: '600' }}>{match[2]}</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={idx} style={{ fontSize: '16px', color: '#3B2213', fontWeight: '600', lineHeight: '1.4', textAlign: 'left', width: '100%' }}>
+                        {itemStr}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button 
+                  onClick={() => markCompleted(order.id)}
+                  style={{ 
+                    width: '100%', 
+                    padding: '16px', 
+                    borderRadius: '16px', 
+                    border: 'none', 
+                    background: '#3B2213', 
+                    color: '#fff', 
+                    fontWeight: '900', 
+                    fontSize: '15px', 
+                    cursor: 'pointer', 
+                    boxShadow: '0 8px 15px rgba(59, 34, 19, 0.2)',
+                    transition: 'transform 0.1s' 
+                  }}
+                  onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.97)'}
+                  onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  Mark as Completed
+                </button>
+
               </div>
-
-              <div style={{ padding: '15px', flex: 1 }}>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                  {/* Safely split the receipt text to show items */}
-                  {order.items_summary ? (
-                    order.items_summary.split(' - ').length > 1 ? (
-                      order.items_summary.split(' - ')[1].split(', ').map((itemText, idx) => (
-                        <li key={idx} style={{ marginBottom: '12px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px', fontSize: '16px', fontWeight: '800', color: '#111' }}>
-                          {itemText}
-                        </li>
-                      ))
-                    ) : (
-                      <li style={{ color: '#111', fontWeight: 'bold' }}>{order.items_summary}</li>
-                    )
-                  ) : (
-                    <li style={{ color: '#9ca3af', fontStyle: 'italic' }}>No items listed.</li>
-                  )}
-                </ul>
-              </div>
-
-              <button 
-                onClick={() => markAsComplete(order.id)}
-                style={{ width: '100%', padding: '20px', backgroundColor: '#3b2213', color: 'white', border: 'none', fontSize: '16px', fontWeight: '900', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px', transition: 'background-color 0.2s' }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#111'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#3b2213'}
-              >
-                Mark Complete
-              </button>
-            </div>
-          ))}
-
+            );
+          })}
         </div>
       )}
     </div>

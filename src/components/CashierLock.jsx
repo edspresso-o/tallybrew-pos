@@ -129,7 +129,7 @@ export default function CashierLock({ onUnlock }) {
       );
     }
     return (
-       <img 
+      <img 
         src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
         alt="TallyBrew Logo" 
         style={{ maxWidth: '450px', width: '100%', height: 'auto', marginBottom: '0px' }} 
@@ -137,9 +137,33 @@ export default function CashierLock({ onUnlock }) {
     );
   };
 
+  // --- REDESIGNED LOADING SCREEN ---
   if (isLoading) return (
-    <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FDFBF7' }}>
-      <h2 style={{ color: '#B56124', fontFamily: "'Inter', sans-serif" }}>Brewing your dashboard...</h2>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif" }}>
+      <style>{`
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+      `}</style>
+      
+      <div style={{ position: 'relative', width: '70px', height: '70px', marginBottom: '25px' }}>
+        {/* Spinning Outer Ring */}
+        <div style={{ boxSizing: 'border-box', display: 'block', position: 'absolute', width: '70px', height: '70px', border: '4px solid #E6D0A9', borderRadius: '50%', animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite', borderTopColor: '#B56124' }}></div>
+        {/* Pulsing Coffee Cup Icon inside */}
+        <svg style={{ position: 'absolute', top: '21px', left: '21px', color: '#3B2213', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
+          <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>
+          <line x1="6" y1="2" x2="6" y2="4"></line>
+          <line x1="10" y1="2" x2="10" y2="4"></line>
+          <line x1="14" y1="2" x2="14" y2="4"></line>
+        </svg>
+      </div>
+
+      <h2 style={{ color: '#3B2213', fontSize: '22px', fontWeight: '900', letterSpacing: '-0.5px', margin: 0, animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>
+        Brewing your dashboard...
+      </h2>
+      <p style={{ color: '#B56124', fontSize: '14px', fontWeight: '700', marginTop: '8px' }}>
+        Please wait a moment
+      </p>
     </div>
   );
 
@@ -194,7 +218,7 @@ export default function CashierLock({ onUnlock }) {
             <form onSubmit={handleAddStaff} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#B56124', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</label>
-                 <input type="text" placeholder="e.g., Ian Mark" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} style={{ width: '100%', padding: '12px 15px', borderRadius: '12px', border: '2px solid #D5B888', background: '#FDFBF7', fontSize: '15px', fontWeight: '700', color: '#3B2213', outline: 'none', boxSizing: 'border-box' }} required />
+                 <input type="text" placeholder="e.g., Jane" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} style={{ width: '100%', padding: '12px 15px', borderRadius: '12px', border: '2px solid #D5B888', background: '#FDFBF7', fontSize: '15px', fontWeight: '700', color: '#3B2213', outline: 'none', boxSizing: 'border-box' }} required />
               </div>
               
               <div>
@@ -288,7 +312,6 @@ export default function CashierLock({ onUnlock }) {
               ))}
             </div>
 
-            {/* RESTORED: Warm beige (#F5E8D2) for the numbers, and soft white (#FDFBF7) for 'C' */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', justifyItems: 'center', maxWidth: '200px', margin: '0 auto' }}>
               {['1','2','3','4','5','6','7','8','9'].map(num => (
                 <button key={num} className="numpad-btn" onClick={() => handlePinPress(num)} style={{ width: '55px', height: '55px', borderRadius: '50%', background: '#F5E8D2', border: 'none', fontSize: '22px', fontWeight: '900', color: '#3B2213', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(59,34,19,0.1)' }}>
