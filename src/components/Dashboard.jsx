@@ -307,7 +307,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       )}
 
       <div className="dashboard-header" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: '35px' }}>
-        <h1 style={{ margin: 0, fontSize: '27px', fontWeight: '900', color: '#111', letterSpacing: '-0.5px' }}>Store Performance</h1>
+        <h1 style={{ margin: 0, fontSize: '25px', fontWeight: '900', color: '#111', letterSpacing: '-0.5px' }}>Store Performance</h1>
         <div className="header-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
           
           <select 
