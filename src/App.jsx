@@ -21,6 +21,31 @@ import './App.css';
 
 let isCloningInventory = false;
 
+const SECRET_KEY = "TallyBrew@2026_SecureVault_X99!";
+
+const encryptData = (data) => {
+  const text = JSON.stringify(data);
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+  }
+  return btoa(result); 
+};
+
+const decryptData = (encryptedData) => {
+  try {
+    const text = atob(encryptedData);
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+      result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+    }
+    return JSON.parse(result);
+  } catch (e) {
+    console.error("Vault Tampering Detected! Corrupted data neutralized.");
+    return []; 
+  }
+};
+
 function App() {
   const [session, setSession] = useState(null); 
   const [activeCashier, setActiveCashier] = useState(null); 
@@ -65,6 +90,20 @@ function App() {
   const [shiftStats, setShiftStats] = useState(null);
   const [showShiftReport, setShowShiftReport] = useState(false);
 
+  // --- UPGRADED: Custom App Alert System ---
+  const [appAlert, setAppAlert] = useState({ isOpen: false, type: 'error', message: '', onConfirm: null });
+
+  const showAlert = (message, type = 'error') => {
+    setAppAlert({ isOpen: true, type, message, onConfirm: null });
+  };
+
+  const showConfirm = (message, onConfirmCallback) => {
+    setAppAlert({ isOpen: true, type: 'confirm', message, onConfirm: onConfirmCallback });
+  };
+
+  const closeAlert = () => setAppAlert({ ...appAlert, isOpen: false });
+  // -------------------------------------
+
   const [modifierModal, setModifierModal] = useState({
     isOpen: false,
     product: null,
@@ -79,28 +118,29 @@ function App() {
 
   const categories = ["All", "Hot Coffee", "Iced Coffee", "Non-Coffee", "Frappe", "Snacks", "Rice Meals", "Add-on", "Milk"];
 
+  const effectiveBranch = activeLocation === 'admin_remote' 
+    ? (adminViewBranch || (empireBranches.length > 0 ? empireBranches[0].id : null)) 
+    : activeLocation;
+
   const getOfflineQueue = () => {
     try {
-      return JSON.parse(localStorage.getItem('tallybrew_offline_queue') || '[]');
+      const stored = localStorage.getItem('tallybrew_offline_queue');
+      if (!stored) return [];
+      if (stored.startsWith('[')) return JSON.parse(stored);
+      return decryptData(stored);
     } catch (e) {
       return [];
     }
   };
 
   const fetchAllData = async () => {
-    const loc = localStorage.getItem('tallybrew_branch');
-
-    if (loc === 'admin_remote' && empireBranches.length === 0) {
+    if (activeLocation === 'admin_remote' && empireBranches.length === 0) {
       const { data: bData } = await supabase.from('branches').select('*').order('name');
       if (bData && bData.length > 0) {
         setEmpireBranches(bData);
         if (!adminViewBranch) setAdminViewBranch(bData[0].id);
       }
     }
-
-    const effectiveBranch = loc === 'admin_remote' 
-      ? (adminViewBranch || (empireBranches.length > 0 ? empireBranches[0].id : null)) 
-      : loc;
 
     const { data: pData } = await supabase.from('products').select('*').order('name', { ascending: true });
     if (pData) setMenuItems(pData);
@@ -171,6 +211,27 @@ function App() {
 
   useEffect(() => { if (session && isOnline) fetchAllData(); }, [session, isOnline, adminViewBranch]);
 
+  useEffect(() => {
+    const handleContextMenu = (e) => e.preventDefault();
+    document.addEventListener('contextmenu', handleContextMenu);
+
+    const handleKeyDown = (e) => {
+      if (
+        e.key === 'F12' || 
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) ||
+        (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
+      ) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   const handleCashierLogin = async (cashier) => {
     try {
       if (cashier.role === 'admin' || cashier.role === 'manager') {
@@ -184,15 +245,29 @@ function App() {
       } else {
         setPendingCashier(cashier); setShowStartShift(true); 
       }
-    } catch(e) { alert("Error checking shift status."); }
+    } catch(e) { 
+      showAlert("Error checking shift status."); 
+    }
   };
 
   const openRegister = async () => {
     if (!pendingCashier) return;
     const cash = parseFloat(startingCashInput) || 0;
-    const { data, error } = await supabase.from('shifts').insert([{ cashier_name: pendingCashier.username, starting_cash: cash }]).select().single();
-    if (data) {
-      setActiveShift(data); setActiveCashier(pendingCashier); setShowStartShift(false); setPendingCashier(null); setStartingCashInput(""); setCurrentView('Menu');
+    
+    try {
+      const { data, error } = await supabase.from('shifts').insert([{ 
+        cashier_name: pendingCashier.username, 
+        starting_cash: cash,
+        branch_id: effectiveBranch
+      }]).select().single();
+
+      if (error) throw error;
+
+      if (data) {
+        setActiveShift(data); setActiveCashier(pendingCashier); setShowStartShift(false); setPendingCashier(null); setStartingCashInput(""); setCurrentView('Menu');
+      }
+    } catch (err) {
+      showAlert("Database Error: " + err.message);
     }
   };
 
@@ -204,9 +279,6 @@ function App() {
   };
 
   const prepareEndShift = async () => {
-    const loc = localStorage.getItem('tallybrew_branch');
-    const effectiveBranch = loc === 'admin_remote' ? adminViewBranch : loc;
-
     const { data: shiftSales } = await supabase.from('sales')
       .select('*')
       .gte('created_at', activeShift.start_time)
@@ -268,10 +340,8 @@ function App() {
     setShowShiftReport(true); 
   };
 
-  // --- UPGRADED: Smart Logo Print Function ---
   const handlePrintZReading = () => {
     const printContent = document.getElementById('printable-z-read').innerHTML;
-    
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     
     printWindow.document.write(`
@@ -286,14 +356,13 @@ function App() {
               padding: 15px; 
               margin: 0;
               color: #000;
-              width: 270px; /* Standard 80mm thermal paper width */
+              width: 270px; 
             }
           </style>
         </head>
         <body>
           ${printContent}
           <script>
-            // Tell the browser to wait for the TallyBrew logo to download before opening the print menu!
             window.onload = function() {
               setTimeout(() => {
                 window.print();
@@ -381,9 +450,6 @@ function App() {
   const processOrderToSupabase = async (orderPackage) => {
     const { data: newSale, error: saleError } = await supabase.from('sales').insert([orderPackage.sale]).select().single();
     if (saleError) throw saleError;
-    
-    const loc = localStorage.getItem('tallybrew_branch');
-    const effectiveBranch = loc === 'admin_remote' ? adminViewBranch : loc;
 
     const getLocalInventoryId = async (globalInvId) => {
       const { data: origItem } = await supabase.from('inventory').select('name').eq('id', globalInvId).single();
@@ -433,7 +499,7 @@ function App() {
     for (const order of pending) {
       try { await processOrderToSupabase(order); } catch (err) { remainingQueue.push(order); }
     }
-    localStorage.setItem('tallybrew_offline_queue', JSON.stringify(remainingQueue));
+    localStorage.setItem('tallybrew_offline_queue', encryptData(remainingQueue));
     setPendingSalesCount(remainingQueue.length);
     if (remainingQueue.length === 0) fetchAllData(); 
   };
@@ -441,8 +507,6 @@ function App() {
   const confirmPaymentAndSave = async (method, receivedAmount, customerName, orderType) => {
     const subtotal = cart.reduce((s, i) => s + (i.price * i.qty), 0);
     const finalTotal = subtotal * (1 - discount.rate);
-    const loc = localStorage.getItem('tallybrew_branch');
-    const effectiveBranch = loc === 'admin_remote' ? adminViewBranch : loc;
     
     let itemsList = cart.map(item => `${item.qty}x ${item.name}`).join(', ');
     let summary = `[${orderType.toUpperCase()}] ${customerName || 'Guest'} - ${itemsList}`;
@@ -463,7 +527,7 @@ function App() {
   const saveOffline = (orderPackage) => {
     const pending = getOfflineQueue();
     pending.push(orderPackage);
-    localStorage.setItem('tallybrew_offline_queue', JSON.stringify(pending));
+    localStorage.setItem('tallybrew_offline_queue', encryptData(pending));
     setPendingSalesCount(pending.length);
   };
 
@@ -476,8 +540,12 @@ function App() {
 
   const requestDeleteProduct = (id) => {
     const role = activeCashier?.role || 'cashier';
-    if (role !== 'manager' && role !== 'admin') { setPendingAction({ type: 'delete', payload: id }); setShowManagerAuth(true);
-    } else { if (window.confirm("Delete this product?")) performDeleteProduct(id); }
+    if (role !== 'manager' && role !== 'admin') { 
+      setPendingAction({ type: 'delete', payload: id }); 
+      setShowManagerAuth(true);
+    } else { 
+      showConfirm("Are you sure you want to delete this product? This action cannot be undone.", () => performDeleteProduct(id)); 
+    }
   };
 
   const requestAddDiscount = () => {
@@ -495,11 +563,24 @@ function App() {
         else if (pendingAction.type === 'discount') setIsDiscountOpen(true);
         else if (pendingAction.type === 'close_register') prepareEndShift(); 
         setShowManagerAuth(false); setPendingAction(null); setManagerPinInput("");
-      } else { alert("Incorrect PIN or you do not have Manager privileges!"); setManagerPinInput(""); }
-    } catch (err) { alert("System Error."); setManagerPinInput(""); }
+      } else { 
+        showAlert("Incorrect PIN or you do not have Manager privileges!", "error"); 
+        setManagerPinInput(""); 
+      }
+    } catch (err) { 
+      showAlert("System Error connecting to database.", "error"); 
+      setManagerPinInput(""); 
+    }
   };
 
-  const performDeleteProduct = async (id) => { try { await supabase.from('products').delete().eq('id', id); fetchAllData(); } catch (error) { alert("Error: " + error.message); } };
+  const performDeleteProduct = async (id) => { 
+    try { 
+      await supabase.from('products').delete().eq('id', id); 
+      fetchAllData(); 
+    } catch (error) { 
+      showAlert("Error deleting product: " + error.message, "error"); 
+    } 
+  };
 
   const addProduct = async (formData, selectedFile) => {
     try {
@@ -514,16 +595,18 @@ function App() {
       }
       await supabase.from('products').insert([{ name: formData.name, price: parseFloat(formData.price), category: formData.category, recipe: formData.recipe, image_url: image_url }]);
       fetchAllData(); setIsAddProductOpen(false);
-    } catch (error) { alert("Error: " + error.message); }
+    } catch (error) { 
+      showAlert("Error adding product: " + error.message, "error"); 
+    }
   };
 
   const addIngredient = async (formData) => {
     try { 
-      const loc = localStorage.getItem('tallybrew_branch');
-      const effectiveBranch = loc === 'admin_remote' ? adminViewBranch : loc;
       await supabase.from('inventory').insert([{ name: formData.name, stock_qty: parseFloat(formData.stock_qty), unit: formData.unit, branch_id: effectiveBranch }]); 
       fetchAllData(); setIsAddIngredientOpen(false); 
-    } catch (error) { alert("Error: " + error.message); }
+    } catch (error) { 
+      showAlert("Error adding ingredient: " + error.message, "error"); 
+    }
   };
 
   const handleManualRestock = async (id, newStock, invoiceData) => {
@@ -575,7 +658,7 @@ function App() {
         </div>
       )}
 
-      {activeLocation === 'admin_remote' && currentView !== 'Dashboard' && empireBranches.length > 0 && (
+      {activeCashier && activeLocation === 'admin_remote' && currentView !== 'Dashboard' && empireBranches.length > 0 && (
         <div className="no-print" style={{ position: 'absolute', top: '30px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#3B2213', padding: '12px 25px', borderRadius: '30px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 10px 25px rgba(59,34,19,0.3)', border: '2px solid #E6D0A9', animation: 'popIn 0.3s' }}>
            <span style={{color: '#E6D0A9', fontWeight: '900', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px'}}>📍 Editing:</span>
            <select value={adminViewBranch || ''} onChange={(e) => setAdminViewBranch(e.target.value)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '16px', fontWeight: '900', outline: 'none', cursor: 'pointer', textAlign: 'center' }}>
@@ -610,12 +693,60 @@ function App() {
               </>
             )}
             {currentView === 'Inventory' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}><Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} /></div>}
-            {currentView === 'Settings' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}><Settings activeCashier={activeCashier} activeShift={activeShift} onPrepareEndShift={requestEndShift} /></div>}
+            {currentView === 'Settings' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}><Settings activeCashier={activeCashier} activeShift={activeShift} onPrepareEndShift={requestEndShift} branchId={effectiveBranch} /></div>}
           </div>
         </div>
       ) : null}
 
-      {/* MODALS */}
+      {/* --- REDESIGNED: CUSTOM GLOBAL ALERT & CONFIRM MODAL (NO EMOJIS) --- */}
+      {appAlert.isOpen && (
+        <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10001, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ width: '400px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+            
+            <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
+              {appAlert.type === 'error' ? (
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+              ) : (
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#B56124" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              )}
+            </div>
+
+            <h2 style={{ fontSize: '26px', fontWeight: '900', margin: '0 0 10px', color: '#3B2213', letterSpacing: '-0.5px' }}>
+              {appAlert.type === 'error' ? 'Action Denied' : 'Confirm Action'}
+            </h2>
+            
+            <p style={{ color: '#3B2213', fontSize: '15px', marginBottom: '30px', fontWeight: '600', opacity: 0.8, lineHeight: '1.4' }}>
+              {appAlert.message}
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {appAlert.type === 'confirm' && (
+                <button onClick={closeAlert} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#FDFBF7', color: '#3B2213', fontWeight: '900', fontSize: '15px', cursor: 'pointer' }}>Cancel</button>
+              )}
+              <button 
+                onClick={() => {
+                  if (appAlert.onConfirm) appAlert.onConfirm();
+                  closeAlert();
+                }} 
+                style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#3B2213', color: '#FDFBF7', fontWeight: '900', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,34,19,0.3)' }}
+              >
+                {appAlert.type === 'error' ? 'Dismiss' : 'Confirm'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* OTHER MODALS */}
       {isCheckoutOpen && <CheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} total={cart.reduce((s, i) => s + (i.price * i.qty), 0) * (1 - discount.rate)} onConfirm={confirmPaymentAndSave} cart={cart} discount={discount} />}
       {isRestockOpen && <ManualRestock isOpen={isRestockOpen} onClose={() => { setIsRestockOpen(false); setSelectedInventoryItem(null); }} menuItems={inventory} onRestock={handleManualRestock} preselectedItem={selectedInventoryItem} />}
       {isAddProductOpen && <AddProduct onClose={() => setIsAddProductOpen(false)} addProduct={addProduct} ingredients={inventory} categories={categories.filter(c => c !== 'All')} />}
@@ -725,7 +856,6 @@ function App() {
         </div>
       )}
 
-      {/* --- UPDATED: PRINTABLE Z-READING RECEIPT MODAL W/ LOGO --- */}
       {showShiftReport && shiftStats && (
         <div className="popup-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ width: '380px', borderRadius: '24px', padding: '30px', textAlign: 'center', backgroundColor: '#fff', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s', display: 'flex', flexDirection: 'column' }}>

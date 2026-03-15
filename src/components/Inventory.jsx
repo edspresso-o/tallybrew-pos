@@ -6,7 +6,7 @@ export default function Inventory({ ingredients, onRestockClick, onAddIngredient
       
       {/* HEADER & ACTION BUTTONS */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: '800', color: '#111', margin: 0, letterSpacing: '-0.5px' }}>
+        <h1 style={{ fontSize: '27px', fontWeight: '800', color: '#111', margin: 0, letterSpacing: '-0.5px' }}>
           Inventory Management
         </h1>
         
@@ -32,7 +32,7 @@ export default function Inventory({ ingredients, onRestockClick, onAddIngredient
             onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#964a20'}
             onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#b85e2b'}
           >
-            + Manual Restock
+            Manual Restock
           </button>
 
           <button 
@@ -41,7 +41,7 @@ export default function Inventory({ ingredients, onRestockClick, onAddIngredient
             onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e5e7eb'}
             onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
           >
-            + Add Item
+            Add Item
           </button>
         </div>
       </div>

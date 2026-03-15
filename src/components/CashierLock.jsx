@@ -9,7 +9,7 @@ export default function CashierLock({ onUnlock }) {
   const [isShaking, setIsShaking] = useState(false);
   const [logoError, setLogoError] = useState(false);
   
-  // --- NEW: Loading state so we don't get stuck on empty branches! ---
+
   const [isLoading, setIsLoading] = useState(true); 
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function CashierLock({ onUnlock }) {
       const { data } = await query;
       if (data) setCashiers(data);
       
-      setIsLoading(false); // Tell the app we are done searching!
+      setIsLoading(false); 
     };
     
     fetchCashiers();
@@ -61,7 +61,7 @@ export default function CashierLock({ onUnlock }) {
     }
   };
 
-  // --- NEW: Escape Hatch if stuck in an empty branch ---
+ 
   const handleEmergencyLogout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem('tallybrew_branch');
@@ -94,10 +94,10 @@ export default function CashierLock({ onUnlock }) {
     );
   };
 
-  // Only show the loading screen if we are ACTUALLY loading
+
   if (isLoading) return (
     <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FDFBF7' }}>
-      <h2 style={{ color: '#B56124', fontFamily: "'Inter', sans-serif" }}>Loading Terminal...</h2>
+      <h2 style={{ color: '#B56124', fontFamily: "'Inter', sans-serif" }}>Brewing your dashboard...</h2>
     </div>
   );
 
@@ -142,7 +142,7 @@ export default function CashierLock({ onUnlock }) {
               <p style={{ color: '#3B2213', fontSize: '13px', margin: 0, fontWeight: '600', opacity: 0.8 }}>Tap your profile to sign in.</p>
             </div>
 
-            {/* --- NEW: Empty State Logic --- */}
+            {}
             {cashiers.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '10px' }}>
                 <p style={{ color: '#dc2626', fontSize: '14px', fontWeight: '800', marginBottom: '25px', lineHeight: '1.4' }}>
