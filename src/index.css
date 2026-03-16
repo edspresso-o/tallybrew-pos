@@ -252,15 +252,16 @@ h1 { font-size: 34px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.5px; 
   .auth-input.otp-input { font-size: 30px; letter-spacing: 16px; padding-left: 32px; }
 }
 /* =========================================================
-   NATIVE APP FEEL: Prevent long-press highlights & popups
-========================================================= */
-* {
-  -webkit-touch-callout: none; /* Disables the long-press popup on iOS */
-  -webkit-user-select: none;   /* Safari */
-  -moz-user-select: none;      /* Firefox */
-  -ms-user-select: none;       /* Internet Explorer/Edge */
-  user-select: none;           /* Standard HTML */
-}
+           NATIVE APP FEEL: Prevent long-press highlights & popups
+        ========================================================= */
+        * {
+          -webkit-touch-callout: none; 
+          -webkit-user-select: none;   
+          -moz-user-select: none;      
+          -ms-user-select: none;       
+          user-select: none;   
+          touch-action: manipulation; /* NEW: Disables double-tap to zoom! */        
+        }
 
 /* We MUST re-enable it for inputs, or cashiers won't be able to type! */
 input, textarea, select {
