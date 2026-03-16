@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-export default function Sidebar({ currentView, setCurrentView, activeCashier, activeShift }) {
+export default function Sidebar({ currentView, setCurrentView, activeCashier, activeShift, isMobileNavOpen, setIsMobileNavOpen }) {
   const [showOverrideModal, setShowOverrideModal] = useState(false);
 
   const handleSignOut = async () => {
@@ -38,11 +38,101 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
           from { opacity: 0; transform: scale(0.95); }
           to { opacity: 1; transform: scale(1); }
         }
+        
+        /* DEFAULT DESKTOP STYLES */
+        .sidebar-wrapper {
+          width: 260px;
+          min-width: 260px;
+          background-color: #0a0a0a;
+          color: #fff;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          z-index: 1001;
+        }
+        
+        .mobile-close-btn {
+          display: none;
+        }
+
+        /* FIX FOR APP.JSX ELEMENTS */
+        .mobile-nav-toggle {
+          display: none !important; /* hidden on desktop */
+          position: fixed;
+          top: 20px;
+          left: 20px;
+          z-index: 999;
+          background: #3B2213;
+          color: #E6D0A9;
+          border: none;
+          border-radius: 12px;
+          padding: 12px;
+          cursor: pointer;
+          box-shadow: 0 4px 10px rgba(59,34,19,0.2);
+        }
+
+        .sidebar-overlay {
+           display: none;
+        }
+
+        /* MOBILE RESPONSIVE STYLES */
+        @media (max-width: 850px) {
+          .mobile-nav-toggle {
+             display: flex !important;
+             align-items: center;
+             justify-content: center;
+          }
+          
+          .sidebar-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            transform: translateX(-100%);
+            box-shadow: 10px 0 25px rgba(0,0,0,0.5);
+          }
+          
+          .sidebar-wrapper.mobile-open {
+            transform: translateX(0);
+          }
+
+          .sidebar-overlay.open {
+             display: block;
+             position: fixed;
+             top: 0; left: 0; right: 0; bottom: 0;
+             background: rgba(59, 34, 19, 0.6);
+             backdrop-filter: blur(3px);
+             z-index: 1000;
+             animation: fadeIn 0.3s ease;
+          }
+
+          .mobile-close-btn {
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             position: absolute;
+             top: 20px;
+             right: 20px;
+             background: rgba(255,255,255,0.1);
+             border: none;
+             border-radius: 50%;
+             width: 36px;
+             height: 36px;
+             color: #fff;
+             font-size: 20px;
+             cursor: pointer;
+             z-index: 1002;
+          }
+        }
       `}</style>
 
       {/* SHIFT STILL ACTIVE WARNING POPUP */}
       {showOverrideModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10005, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ width: '380px', borderRadius: '32px', padding: '35px', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'fadeIn 0.3s ease-out', textAlign: 'center' }}>
             
             <div style={{ width: '70px', height: '70px', margin: '0 auto 20px', borderRadius: '20px', background: '#FDFBF7', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
@@ -67,9 +157,13 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
         </div>
       )}
 
-      {/* NORMAL SIDEBAR CONTENT */}
-      <div style={{ width: '260px', minWidth: '260px', backgroundColor: '#0a0a0a', color: '#fff', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box', margin: 0, padding: 0 }}>
+      {/* SIDEBAR CONTENT */}
+      <div className={`sidebar-wrapper ${isMobileNavOpen ? 'mobile-open' : ''}`}>
         
+        <button className="mobile-close-btn" onClick={() => setIsMobileNavOpen && setIsMobileNavOpen(false)}>
+          &times;
+        </button>
+
         <div style={{ padding: '40px 0 30px 0', textAlign: 'center', width: '100%', background: 'transparent' }}>
           <img 
             src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
@@ -84,7 +178,11 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
             return (
               <button 
                 key={item.name}
-                onClick={() => setCurrentView(item.name)}
+                onClick={() => {
+                  setCurrentView(item.name);
+                  // Close sidebar automatically on mobile after navigating
+                  if (setIsMobileNavOpen) setIsMobileNavOpen(false); 
+                }}
                 onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
                 onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
                 onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
