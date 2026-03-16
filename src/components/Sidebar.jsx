@@ -196,7 +196,8 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
           })}
         </nav>
 
-        <div style={{ padding: '25px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        {/* LIFTED BOTTOM SECTION: Increased bottom padding to 40px */}
+        <div style={{ padding: '25px 25px 40px 25px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '15px', marginBottom: '25px', paddingLeft: '5px' }}>
             <div style={{ width: '45px', height: '45px', backgroundColor: '#C0662A', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '800' }}>
               {activeCashier?.username ? activeCashier.username.charAt(0).toUpperCase() : 'U'}
