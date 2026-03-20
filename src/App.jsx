@@ -17,6 +17,7 @@ import ManualRestock from './components/ManualRestock.jsx';
 import Auth from './components/Auth.jsx'; 
 import CashierLock from './components/CashierLock.jsx'; 
 import LandingPage from './components/LandingPage.jsx';
+import Transactions from './components/Transactions.jsx'; 
 import './App.css';
 
 let isCloningInventory = false;
@@ -64,6 +65,11 @@ function App() {
   const [cart, setCart] = useState([]);
   const [recipes, setRecipes] = useState([]);
   
+  const [savedOrders, setSavedOrders] = useState(() => {
+    const saved = localStorage.getItem('tallybrew_saved_orders');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false); 
   const [isRestockOpen, setIsRestockOpen] = useState(false);
@@ -92,6 +98,12 @@ function App() {
 
   const [appAlert, setAppAlert] = useState({ isOpen: false, type: 'error', message: '', onConfirm: null });
 
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false); 
+
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingSalesCount, setPendingSalesCount] = useState(0);
+
   const showAlert = (message, type = 'error') => {
     setAppAlert({ isOpen: true, type, message, onConfirm: null });
   };
@@ -110,15 +122,15 @@ function App() {
     addons: [] 
   });
 
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [pendingSalesCount, setPendingSalesCount] = useState(0);
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-
   const categories = ["All", "Hot Coffee", "Iced Coffee", "Non-Coffee", "Frappe", "Snacks", "Rice Meals", "Add-on", "Milk"];
 
   const effectiveBranch = activeLocation === 'admin_remote' 
     ? (adminViewBranch || (empireBranches.length > 0 ? empireBranches[0].id : null)) 
     : activeLocation;
+
+  useEffect(() => {
+    localStorage.setItem('tallybrew_saved_orders', JSON.stringify(savedOrders));
+  }, [savedOrders]);
 
   const getOfflineQueue = () => {
     try {
@@ -129,6 +141,12 @@ function App() {
     } catch (e) {
       return [];
     }
+  };
+
+  const clearStuckOfflineQueue = () => {
+    localStorage.removeItem('tallybrew_offline_queue');
+    setPendingSalesCount(0);
+    showAlert("Stuck orders cleared successfully.", "confirm");
   };
 
   const fetchAllData = async () => {
@@ -193,6 +211,7 @@ function App() {
     const pending = getOfflineQueue();
     setPendingSalesCount(pending.length);
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -293,10 +312,16 @@ function App() {
         const amount = Number(sale.total_amount || 0);
         totalSales += amount;
         
-        if (sale.payment_method === 'GCash') {
+        const cAmt = Number(sale.cash_amount || 0);
+        const gAmt = Number(sale.gcash_amount || 0);
+
+        if (sale.payment_method === 'GCash' && cAmt === 0 && gAmt === 0) {
           gcashSales += amount;
-        } else {
+        } else if (sale.payment_method === 'Cash' && cAmt === 0 && gAmt === 0) {
           cashSales += amount;
+        } else {
+          cashSales += cAmt;
+          gcashSales += gAmt;
         }
 
         if (sale.items_summary && sale.items_summary.includes('(w/')) {
@@ -305,7 +330,6 @@ function App() {
       });
     }
 
-    // --- NEW: EXPECTED CASH INCLUDES THE DEDUCTION FOR SKIMMED CASH ---
     const expectedCash = Number(activeShift.starting_cash) + cashSales - Number(activeShift.cash_drops || 0);
 
     setShiftStats({
@@ -315,7 +339,7 @@ function App() {
        discountCount,
        expectedCash,
        startingCash: Number(activeShift.starting_cash),
-       cashDrops: Number(activeShift.cash_drops || 0), // Added cashDrops to shiftStats
+       cashDrops: Number(activeShift.cash_drops || 0),
        transactions: shiftSales ? shiftSales.length : 0,
        startTime: activeShift.start_time
     });
@@ -386,8 +410,92 @@ function App() {
     window.location.reload(); 
   };
 
+  const handleHoldOrder = (customerName) => {
+    const newOrder = {
+      id: Date.now().toString(),
+      customerName: customerName,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      cart: [...cart],
+      discount: { ...discount }
+    };
+    setSavedOrders(prev => [...prev, newOrder]);
+    setCart([]);
+    setDiscount({ label: 'No Discount', rate: 0 });
+  };
+
+  const handleResumeOrder = (order) => {
+    setCart(order.cart);
+    setDiscount(order.discount || { label: 'No Discount', rate: 0 });
+    setSavedOrders(prev => prev.filter(o => o.id !== order.id));
+  };
+
+  const handleDeleteSavedOrder = (id) => {
+    setSavedOrders(prev => prev.filter(o => o.id !== id));
+  };
+
+  const handleClearCart = () => {
+    setCart([]);
+    setDiscount({ label: 'No Discount', rate: 0 });
+  };
+
+  const checkStockAvailability = (targetItem, quantityToAdd) => {
+    const projectedUsage = {};
+    
+    cart.forEach(cItem => {
+        const baseId = cItem.id.toString().split('-')[0];
+        const relationalRecipe = recipes.filter(r => r.menu_item_id.toString() === baseId);
+        relationalRecipe.forEach(req => {
+            projectedUsage[req.inventory_item_id] = (projectedUsage[req.inventory_item_id] || 0) + (Number(req.quantity_required) * cItem.qty);
+        });
+
+        if (cItem.recipe && cItem.recipe.startsWith('[')) {
+            try {
+                const jsonRecipe = JSON.parse(cItem.recipe);
+                jsonRecipe.forEach(req => {
+                    projectedUsage[req.id] = (projectedUsage[req.id] || 0) + (Number(req.qty) * cItem.qty);
+                });
+            } catch (e) {}
+        }
+    });
+
+    const targetBaseId = targetItem.id.toString().split('-')[0];
+    const targetRelationalRecipe = recipes.filter(r => r.menu_item_id.toString() === targetBaseId);
+    targetRelationalRecipe.forEach(req => {
+        projectedUsage[req.inventory_item_id] = (projectedUsage[req.inventory_item_id] || 0) + (Number(req.quantity_required) * quantityToAdd);
+    });
+
+    if (targetItem.recipe && targetItem.recipe.startsWith('[')) {
+        try {
+            const jsonRecipe = JSON.parse(targetItem.recipe);
+            jsonRecipe.forEach(req => {
+                projectedUsage[req.id] = (projectedUsage[req.id] || 0) + (Number(req.qty) * quantityToAdd);
+            });
+        } catch (e) {}
+    }
+
+    for (const [invId, totalNeeded] of Object.entries(projectedUsage)) {
+        const invItem = inventory.find(i => i.id.toString() === invId.toString());
+        if (invItem) {
+            const stock = Math.max(Number(invItem.stock_qty || 0), 0);
+            if (totalNeeded > stock) {
+                return { allowed: false, itemName: invItem.name, needed: totalNeeded, stock };
+            }
+        }
+    }
+    
+    return { allowed: true };
+  };
+
   const handleItemClick = (product) => {
-    if (['Snacks', 'Rice Meals', 'Add-on', 'Milk'].includes(product.category)) { addToCart(product); return; }
+    if (['Snacks', 'Rice Meals', 'Add-on', 'Milk'].includes(product.category)) { 
+      const check = checkStockAvailability(product, 1);
+      if (!check.allowed) {
+          showAlert(`CRITICAL LOW STOCK: Cannot add ${product.name}. You only have ${check.stock} ${check.itemName} left.`, 'error');
+          return;
+      }
+      addToCart(product); 
+      return; 
+    }
     setModifierModal({ isOpen: true, product: product, size: 'Regular', milk: 'Whole', addons: [] });
   };
 
@@ -434,7 +542,15 @@ function App() {
     const modifierString = modLabels.length > 0 ? ` (${modLabels.join(', ')})` : '';
     const uniqueId = `${product.id}-${size}-${milk}-${addons.map(a=>a.id).sort().join('-')}`;
 
-    addToCart({ ...product, id: uniqueId, name: `${product.name}${modifierString}`, price: finalPrice, recipe: JSON.stringify(mergedRecipe) });
+    const itemToCart = { ...product, id: uniqueId, name: `${product.name}${modifierString}`, price: finalPrice, recipe: JSON.stringify(mergedRecipe) };
+
+    const check = checkStockAvailability(itemToCart, 1);
+    if (!check.allowed) {
+        showAlert(`CRITICAL LOW STOCK: Cannot complete this order. You only have ${check.stock} ${check.itemName} left.`, 'error');
+        return; 
+    }
+
+    addToCart(itemToCart);
     setModifierModal({ isOpen: false, product: null, size: 'Regular', milk: 'Whole', addons: [] });
   };
 
@@ -446,7 +562,19 @@ function App() {
     });
   };
 
-  const updateQty = (id, amount) => { setCart(prev => prev.map(item => item.id === id ? { ...item, qty: item.qty + amount } : item).filter(i => i.qty > 0)); };
+  const updateQty = (id, amount) => { 
+    if (amount > 0) {
+      const itemToUpdate = cart.find(i => i.id === id);
+      if (itemToUpdate) {
+          const check = checkStockAvailability(itemToUpdate, amount);
+          if (!check.allowed) {
+              showAlert(`CRITICAL LOW STOCK: Cannot add more. You only have ${check.stock} ${check.itemName} left.`, 'error');
+              return;
+          }
+      }
+    }
+    setCart(prev => prev.map(item => item.id === id ? { ...item, qty: item.qty + amount } : item).filter(i => i.qty > 0)); 
+  };
 
   const processOrderToSupabase = async (orderPackage) => {
     const { data: newSale, error: saleError } = await supabase.from('sales').insert([orderPackage.sale]).select().single();
@@ -505,7 +633,7 @@ function App() {
     if (remainingQueue.length === 0) fetchAllData(); 
   };
 
-  const confirmPaymentAndSave = async (method, receivedAmount, customerName, orderType) => {
+  const confirmPaymentAndSave = async (method, receivedAmount, customerName, orderType, cashAmt = 0, gcashAmt = 0) => {
     const subtotal = cart.reduce((s, i) => s + (i.price * i.qty), 0);
     const finalTotal = subtotal * (1 - discount.rate);
     
@@ -513,8 +641,24 @@ function App() {
     let summary = `[${orderType.toUpperCase()}] ${customerName || 'Guest'} - ${itemsList}`;
     if (discount.rate > 0) summary += ` (w/ ${discount.label} Discount)`;
 
+    let finalCash = cashAmt;
+    let finalGcash = gcashAmt;
+    
+    if (method === 'Cash' && finalCash === 0) finalCash = finalTotal;
+    if (method === 'GCash' && finalGcash === 0) finalGcash = finalTotal;
+
     const orderPackage = {
-      sale: { total_amount: finalTotal, items_count: cart.length, items_summary: summary, payment_method: method, branch_id: effectiveBranch, created_at: new Date().toISOString() },
+      sale: { 
+        total_amount: finalTotal, 
+        items_count: cart.length, 
+        items_summary: summary, 
+        payment_method: method, 
+        cash_amount: finalCash,
+        gcash_amount: finalGcash,
+        kitchen_status: 'pending',
+        branch_id: effectiveBranch, 
+        created_at: new Date().toISOString() 
+      },
       cart: [...cart]
     };
 
@@ -532,9 +676,10 @@ function App() {
     setPendingSalesCount(pending.length);
   };
 
+  // --- NEW: Block Cashiers from accessing Transactions page without a Manager ---
   const handleNavigationRequest = (view) => {
     const role = activeCashier?.role || 'cashier'; 
-    if ((view === 'Dashboard' || view === 'Inventory') && role !== 'manager' && role !== 'admin') {
+    if ((view === 'Dashboard' || view === 'Inventory' || view === 'Transactions') && role !== 'manager' && role !== 'admin') {
       setPendingAction({ type: 'navigate', payload: view }); setShowManagerAuth(true);
     } else { setCurrentView(view); }
   };
@@ -555,6 +700,32 @@ function App() {
     } else { setIsDiscountOpen(true); }
   };
 
+  // --- NEW: Initiate a Void request ---
+  const requestVoidSale = (sale) => {
+    const role = activeCashier?.role || 'cashier';
+    if (role !== 'manager' && role !== 'admin') {
+      setPendingAction({ type: 'void_sale', payload: sale });
+      setShowManagerAuth(true);
+    } else {
+      showConfirm(`Are you sure you want to VOID this ₱${Number(sale.total_amount).toFixed(2)} transaction? This will permanently delete the record.`, () => performVoidSale(sale));
+    }
+  };
+
+  // --- NEW: Perform the actual database deletion ---
+  const performVoidSale = async (sale) => {
+    try {
+      // 1. Delete associated items first
+      await supabase.from('sale_items').delete().eq('sale_id', sale.id);
+      // 2. Delete the main sale record
+      await supabase.from('sales').delete().eq('id', sale.id);
+      
+      showAlert("Transaction successfully voided.", "confirm");
+      fetchAllData();
+    } catch (err) {
+      showAlert("Error voiding transaction: " + err.message, "error");
+    }
+  };
+
   const executeManagerOverride = async () => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('pin', managerPinInput).in('role', ['manager', 'admin']).limit(1);
@@ -563,6 +734,8 @@ function App() {
         else if (pendingAction.type === 'delete') performDeleteProduct(pendingAction.payload);
         else if (pendingAction.type === 'discount') setIsDiscountOpen(true);
         else if (pendingAction.type === 'close_register') prepareEndShift(); 
+        else if (pendingAction.type === 'void_sale') performVoidSale(pendingAction.payload); // Execute void if authorized
+        
         setShowManagerAuth(false); setPendingAction(null); setManagerPinInput("");
       } else { 
         showAlert("Incorrect PIN or you do not have Manager privileges!", "error"); 
@@ -653,9 +826,94 @@ function App() {
 
   return (
     <>
+      <style>{`
+        /* =========================================================
+           NATIVE APP FEEL: Prevent long-press & double tap
+        ========================================================= */
+        * {
+          -webkit-touch-callout: none; 
+          -webkit-user-select: none;   
+          -moz-user-select: none;      
+          -ms-user-select: none;       
+          user-select: none;           
+          touch-action: manipulation;
+        }
+
+        input, textarea, select {
+          -webkit-user-select: auto;
+          -moz-user-select: auto;
+          -ms-user-select: auto;
+          user-select: auto;
+        }
+
+        /* =========================================================
+           GLOBAL BUTTON PRESS ANIMATION
+        ========================================================= */
+        button {
+          -webkit-tap-highlight-color: transparent !important;
+          transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.1s, box-shadow 0.1s ease !important;
+        }
+
+        button:active:not(:disabled) {
+          transform: scale(0.95) !important;
+          opacity: 0.85 !important;
+        }
+        
+        button:disabled {
+          cursor: not-allowed !important;
+        }
+
+        /* =========================================================
+           ULTIMATE RESPONSIVENESS: MODALS FOR TINY PHONES
+        ========================================================= */
+        .popup-overlay > div {
+          width: 92% !important;     
+          max-width: 420px !important; 
+          max-height: 90vh !important; 
+          overflow-y: auto !important; 
+          box-sizing: border-box !important;
+        }
+        
+        .popup-overlay > div::-webkit-scrollbar { display: none; }
+        .popup-overlay > div { -ms-overflow-style: none; scrollbar-width: none; }
+
+        @media (max-width: 600px) {
+          .main-content > div { padding: 15px !important; }
+          .kpi-grid { grid-template-columns: 1fr !important; }
+        }
+
+        /* =========================================================
+           MOBILE RESPONSIVENESS (SMART CART DRAWER)
+        ========================================================= */
+        .responsive-cart-wrapper { height: 100%; z-index: 1000; background: #fff; display: flex; flex-direction: column; }
+        .mobile-cart-fab { display: none; }
+        .mobile-cart-close-btn { display: none; }
+        
+        @media (max-width: 850px) {
+          .responsive-cart-wrapper { position: fixed; top: 0; right: -100%; width: 85% !important; max-width: 400px; transition: right 0.3s ease; box-shadow: -5px 0 25px rgba(0,0,0,0.2); }
+          .responsive-cart-wrapper.open { right: 0; }
+          .mobile-cart-fab { display: flex; position: fixed; bottom: 25px; right: 25px; background: #3B2213; color: #fff; padding: 16px 24px; border-radius: 30px; font-size: 15px; font-weight: 900; box-shadow: 0 8px 20px rgba(59,34,19,0.4); border: 2px solid #E6D0A9; z-index: 998; align-items: center; gap: 10px; cursor: pointer; }
+          .mobile-cart-close-btn { display: flex; background: #3B2213; color: #E6D0A9; border: none; padding: 15px 25px; font-weight: 900; font-size: 16px; text-transform: uppercase; cursor: pointer; align-items: center; justify-content: flex-start; gap: 10px; }
+          .mobile-only-overlay { display: block !important; }
+        }
+        @media (min-width: 851px) {
+          .mobile-only-overlay { display: none !important; }
+        }
+      `}</style>
+
       {(!isOnline || pendingSalesCount > 0) && (
         <div className="no-print" style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10000, background: isOnline ? '#10b981' : '#ef4444', color: '#fff', padding: '10px 20px', borderRadius: '30px', fontWeight: '800', fontSize: '14px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: '8px', animation: 'popIn 0.3s' }}>
-          {isOnline ? ( <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Syncing {pendingSalesCount} Orders...</> ) : ( <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> Offline Mode ({pendingSalesCount} Pending)</> )}
+          {isOnline ? ( 
+            <>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 
+              Syncing {pendingSalesCount} Orders...
+              <button onClick={clearStuckOfflineQueue} style={{ marginLeft: '10px', background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>
+                Clear Stuck Orders
+              </button>
+            </> 
+          ) : ( 
+            <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> Offline Mode ({pendingSalesCount} Pending)</> 
+          )}
         </div>
       )}
 
@@ -692,17 +950,53 @@ function App() {
           <div className="main-content" style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
             {currentView === 'Dashboard' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}><Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} /></div>}
             {currentView === 'Kitchen' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto' }}><KitchenDisplay /></div>}
+            
             {currentView === 'Menu' && (
               <>
-                <div style={{ flex: 1, height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}>
+                <div style={{ flex: 1, height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0', paddingBottom: '80px' }}>
                   <Menu menuItems={displayedItems} categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} addToCart={handleItemClick} onManageClick={() => setIsAddProductOpen(true)} deleteProduct={requestDeleteProduct} editProduct={setEditingProduct} inventory={inventory} recipes={recipes} />
                 </div>
-                {cart.length > 0 && <Cart cart={cart} updateQty={updateQty} total={cart.reduce((s, i) => s + (i.price * i.qty), 0)} handleCheckout={() => cart.length > 0 && setIsCheckoutOpen(true)} discount={discount} onOpenDiscount={requestAddDiscount} />}
+                
+                {isMobileCartOpen && (
+                   <div onClick={() => setIsMobileCartOpen(false)} style={{position: 'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(59, 34, 19, 0.6)', backdropFilter: 'blur(3px)', zIndex: 999}} className="mobile-only-overlay"></div>
+                )}
+
+                <div className={`responsive-cart-wrapper ${isMobileCartOpen ? 'open' : ''}`}>
+                   <button onClick={() => setIsMobileCartOpen(false)} className="mobile-cart-close-btn">
+                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                     Close Cart
+                   </button>
+                   {(cart.length > 0 || savedOrders.length > 0) && (
+                     <Cart 
+                       cart={cart} 
+                       updateQty={updateQty} 
+                       total={cart.reduce((s, i) => s + (i.price * i.qty), 0)} 
+                       handleCheckout={() => cart.length > 0 && setIsCheckoutOpen(true)} 
+                       discount={discount} 
+                       onOpenDiscount={requestAddDiscount} 
+                       savedOrders={savedOrders}
+                       onHoldOrder={handleHoldOrder}
+                       onResumeOrder={handleResumeOrder}
+                       onDeleteSavedOrder={handleDeleteSavedOrder}
+                       onClearCart={handleClearCart}
+                       showAlert={showAlert}
+                     />
+                   )}
+                </div>
+                
+                <button className="mobile-cart-fab no-print" onClick={() => setIsMobileCartOpen(true)}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                  View Cart ({cart.reduce((sum, item) => sum + item.qty, 0)})
+                </button>
               </>
             )}
+
+            {/* --- NEW: Transactions Page Render --- */}
+            {currentView === 'Transactions' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}>
+              <Transactions sales={sales} onVoidSale={requestVoidSale} activeCashier={activeCashier} />
+            </div>}
+
             {currentView === 'Inventory' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}><Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} /></div>}
-            
-            {/* --- PASSED ONUPDATESHIFT TO SETTINGS --- */}
             {currentView === 'Settings' && <div style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '60px' : '0' }}>
               <Settings activeCashier={activeCashier} activeShift={activeShift} onUpdateShift={setActiveShift} onPrepareEndShift={requestEndShift} branchId={effectiveBranch} />
             </div>}
@@ -710,10 +1004,10 @@ function App() {
         </div>
       ) : null}
 
-      {/* --- REDESIGNED: CUSTOM GLOBAL ALERT & CONFIRM MODAL (NO EMOJIS) --- */}
+      {/* CUSTOM GLOBAL ALERT & CONFIRM MODAL */}
       {appAlert.isOpen && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10001, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ width: '400px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+          <div style={{ backgroundColor: '#E6D0A9', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
             
             <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
               {appAlert.type === 'error' ? (
@@ -732,7 +1026,7 @@ function App() {
             </div>
 
             <h2 style={{ fontSize: '26px', fontWeight: '900', margin: '0 0 10px', color: '#3B2213', letterSpacing: '-0.5px' }}>
-              {appAlert.type === 'error' ? 'Action Denied' : 'Confirm Action'}
+              {appAlert.type === 'error' ? 'Action Denied' : 'System Message'}
             </h2>
             
             <p style={{ color: '#3B2213', fontSize: '15px', marginBottom: '30px', fontWeight: '600', opacity: 0.8, lineHeight: '1.4' }}>
@@ -750,7 +1044,7 @@ function App() {
                 }} 
                 style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#3B2213', color: '#FDFBF7', fontWeight: '900', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,34,19,0.3)' }}
               >
-                {appAlert.type === 'error' ? 'Dismiss' : 'Confirm'}
+                {appAlert.type === 'error' ? 'Dismiss' : 'Okay'}
               </button>
             </div>
 
@@ -770,7 +1064,7 @@ function App() {
       {/* MODIFIER MODAL */}
       {modifierModal.isOpen && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ width: '420px', borderRadius: '32px', padding: '35px', backgroundColor: '#FDFBF7', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+          <div style={{ backgroundColor: '#FDFBF7', borderRadius: '32px', padding: '35px', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
               <div>
                 <h2 style={{ fontSize: '24px', fontWeight: '900', margin: '0 0 5px 0', color: '#3B2213', letterSpacing: '-0.5px' }}>Customize Order</h2>
@@ -818,7 +1112,7 @@ function App() {
       {/* SHIFT ENTRY MODAL */}
       {showStartShift && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ width: '420px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+          <div style={{ backgroundColor: '#E6D0A9', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
             <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#B56124" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
             </div>
@@ -841,7 +1135,7 @@ function App() {
       {/* SHIFT CLOSE MODAL */}
       {showEndShift && shiftStats && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ width: '420px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+          <div style={{ backgroundColor: '#E6D0A9', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
             <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#B56124" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
             </div>
@@ -851,7 +1145,6 @@ function App() {
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '700', opacity: 0.8 }}>Starting Float:</span><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '800' }}>₱ {shiftStats.startingCash.toFixed(2)}</span></div>
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '700', opacity: 0.8 }}>Cash Sales:</span><span style={{ fontSize: '14px', color: '#3B2213', fontWeight: '800' }}>+ ₱ {shiftStats.cashSales.toFixed(2)}</span></div>
                
-               {/* --- SHOW SKIMMED CASH DEDUCTION --- */}
                {shiftStats.cashDrops > 0 && (
                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                    <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: '700', opacity: 0.8 }}>Cash Dropped (Skim):</span>
@@ -879,7 +1172,7 @@ function App() {
 
       {showShiftReport && shiftStats && (
         <div className="popup-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ width: '380px', borderRadius: '24px', padding: '30px', textAlign: 'center', backgroundColor: '#fff', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '24px', padding: '30px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s', display: 'flex', flexDirection: 'column' }}>
              
              {/* The Actual Receipt Content */}
              <div id="printable-z-read" style={{ color: '#000', marginBottom: '20px' }}>
@@ -906,7 +1199,6 @@ function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Starting Float:</span><span>₱ {shiftStats.startingCash.toFixed(2)}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Cash Sales:</span><span>+ ₱ {shiftStats.cashSales.toFixed(2)}</span></div>
                   
-                  {/* --- SHOW SKIMMED CASH ON RECEIPT --- */}
                   {shiftStats.cashDrops > 0 && (
                      <div style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', fontSize: '14px' }}><span>Cash Dropped (Skim):</span><span>- ₱ {shiftStats.cashDrops.toFixed(2)}</span></div>
                   )}
@@ -935,7 +1227,7 @@ function App() {
 
       {showManagerAuth && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ width: '420px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+          <div style={{ backgroundColor: '#E6D0A9', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
             <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#B56124" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>

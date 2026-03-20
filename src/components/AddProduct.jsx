@@ -80,7 +80,7 @@ export default function AddProduct({ onClose, addProduct, ingredients, categorie
                 value={formData.category} 
                 onChange={(e) => setFormData({...formData, category: e.target.value})}
               >
-                {/* DYNAMIC CATEGORIES: Pulls exactly what you have in App.jsx */}
+                {}
                 {categories && categories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}

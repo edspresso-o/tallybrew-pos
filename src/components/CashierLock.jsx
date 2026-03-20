@@ -22,9 +22,12 @@ export default function CashierLock({ onUnlock }) {
     const activeBranch = localStorage.getItem('tallybrew_branch');
     let query = supabase.from('profiles').select('*').order('username');
     
+    // --- THE FIX IS HERE ---
     if (activeBranch === 'admin_remote') {
-      query = query.in('role', ['admin', 'manager']);
+      // ONLY fetch profiles that were specifically created on the admin_remote terminal (branch_id is null)
+      query = query.is('branch_id', null);
     } else if (activeBranch) {
+      // Fetch profiles created for this specific physical branch
       query = query.eq('branch_id', activeBranch);
     }
 
@@ -137,7 +140,6 @@ export default function CashierLock({ onUnlock }) {
     );
   };
 
-  // --- REDESIGNED LOADING SCREEN ---
   if (isLoading) return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif" }}>
       <style>{`
