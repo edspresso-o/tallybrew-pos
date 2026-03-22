@@ -6,12 +6,11 @@ export default function Cart({ cart, updateQty, total, handleCheckout, discount,
   const totalAmount = safeTotal - discountAmount;
 
   return (
-    // THE FIX: We added `width: '380px'` and `flexShrink: 0` so it never stretches!
-    // `maxWidth: '100%'` ensures it still fits perfectly on tiny mobile screens.
-    <div className="cart-panel" style={{ width: '380px', maxWidth: '100%', flexShrink: 0, backgroundColor: '#fff', borderLeft: '2px solid #e5e7eb', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    // FIX: flexGrow: 1 forces the entire cart to stretch and fill all available vertical space
+    <div className="cart-panel" style={{ flexGrow: 1, width: '100%', minHeight: '100%', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       
       {/* HEADER */}
-      <div className="cart-header" style={{ padding: '20px', borderBottom: '2px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div className="cart-header" style={{ flexShrink: 0, padding: '20px', borderBottom: '2px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '10px' }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b85e2b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="9" cy="21" r="1"></circle>
           <circle cx="20" cy="21" r="1"></circle>
@@ -20,31 +19,30 @@ export default function Cart({ cart, updateQty, total, handleCheckout, discount,
         <h2 style={{ fontSize: '20px', fontWeight: '900', margin: 0, color: '#111', letterSpacing: '-0.5px' }}>Current Order</h2>
       </div>
       
-      {/* CART ITEMS LIST */}
-      <div className="cart-items" style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+      {/* CART ITEMS LIST (Scrollable Middle) */}
+      {/* FIX: flexGrow: 1 here forces this section to stretch, pushing the summary to the absolute bottom! */}
+      <div className="cart-items" style={{ flexGrow: 1, overflowY: 'auto', padding: '15px' }}>
         {cart.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#9ca3af', marginTop: '40px', fontWeight: '600', fontSize: '15px' }}>Cart is empty</div>
         ) : (
           cart.map(item => (
-            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
+            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', width: '100%' }}>
               
               <div style={{ flex: '0 0 45px', height: '45px', borderRadius: '10px', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-                {item.image_url ? (
-                  <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : null}
+                {item.image_url && <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
               </div>
               
-              <div style={{ flex: '1 1 auto', fontWeight: '800', fontSize: '13px', color: '#111', lineHeight: '1.2', wordBreak: 'break-word' }}>
+              <div style={{ flex: '1 1 auto', minWidth: 0, fontWeight: '800', fontSize: '13px', color: '#111', lineHeight: '1.2', wordBreak: 'break-word', paddingRight: '5px' }}>
                 {item.name}
               </div>
 
               <div style={{ flex: '0 0 auto', display: 'flex', border: '2px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', height: '32px' }}>
-                <button onClick={() => updateQty(item.id, -1)} style={{ width: '30px', backgroundColor: '#f9fafb', color: '#4b5563', border: 'none', cursor: 'pointer', fontWeight: '900', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }} onMouseOver={(e) => e.target.style.background = '#e5e7eb'} onMouseOut={(e) => e.target.style.background = '#f9fafb'}>−</button>
+                <button onClick={() => updateQty(item.id, -1)} style={{ width: '30px', backgroundColor: '#f9fafb', color: '#4b5563', border: 'none', cursor: 'pointer', fontWeight: '900', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
                 <div style={{ width: '28px', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', fontSize: '13px', fontWeight: '800', color: '#111', borderLeft: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb' }}>{item.qty}</div>
-                <button onClick={() => updateQty(item.id, 1)} style={{ width: '30px', backgroundColor: '#f9fafb', color: '#4b5563', border: 'none', cursor: 'pointer', fontWeight: '900', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }} onMouseOver={(e) => e.target.style.background = '#e5e7eb'} onMouseOut={(e) => e.target.style.background = '#f9fafb'}>+</button>
+                <button onClick={() => updateQty(item.id, 1)} style={{ width: '30px', backgroundColor: '#f9fafb', color: '#4b5563', border: 'none', cursor: 'pointer', fontWeight: '900', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
               </div>
 
-              <div style={{ flex: '0 0 auto', minWidth: '55px', fontWeight: '900', fontSize: '14px', color: '#111', textAlign: 'right' }}>
+              <div style={{ flex: '0 0 auto', minWidth: '45px', fontWeight: '900', fontSize: '14px', color: '#111', textAlign: 'right' }}>
                 ₱ {(item.price * item.qty).toFixed(0)}
               </div>
             </div>
@@ -52,8 +50,8 @@ export default function Cart({ cart, updateQty, total, handleCheckout, discount,
         )}
       </div>
 
-      {/* SUMMARY & CHECKOUT SECTION */}
-      <div className="cart-summary" style={{ padding: '20px', borderTop: '2px solid #e5e7eb', backgroundColor: '#fff', boxShadow: '0 -4px 10px rgba(0,0,0,0.02)' }}>
+      {/* SUMMARY & CHECKOUT SECTION (Sticky Bottom) */}
+      <div className="cart-summary" style={{ flexShrink: 0, padding: '20px', paddingBottom: 'max(20px, env(safe-area-inset-bottom))', borderTop: '2px solid #e5e7eb', backgroundColor: '#fff', boxShadow: '0 -4px 10px rgba(0,0,0,0.02)' }}>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#6b7280', fontSize: '14px', fontWeight: '600', padding: '0 4px' }}>
           <span>Subtotal</span>

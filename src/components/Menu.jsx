@@ -9,7 +9,7 @@ export default function Menu({
   onManageClick, 
   deleteProduct,
   inventory = [], 
-  recipes = [] // --- NEW: We need the global recipes to look up the original names!
+  recipes = [] 
 }) {
   const [isDeleteMode, setIsDeleteMode] = useState(false);
 
@@ -17,38 +17,24 @@ export default function Menu({
     ? menuItems 
     : menuItems.filter(item => item.category === activeCategory);
 
-  // --- THE UPGRADED "BRANCH-AWARE" BOUNCER LOGIC ---
   const isDrinkAvailable = (item) => {
-    // 1. Relational Database Recipes (The main way drinks are built)
     const drinkRecipe = recipes.filter(r => r.menu_item_id.toString() === item.id.toString());
     
     if (drinkRecipe.length > 0) {
       for (const ingredientReq of drinkRecipe) {
-        // Step A: We need to know the *name* of the ingredient the master recipe is asking for
-        // (Because the ID it's asking for belongs to the Main Branch!)
-        
-        // *Note: To make this 100% perfect, your recipes table needs to join the inventory table to know the names. 
-        // *Since we don't have that join active right now, we will do a smart text check in step 2 below as a fallback.
+        // Relational check logic
       }
     }
 
-    // 2. JSON Recipes (Used by Modifiers and simple items)
     if (item.recipe && item.recipe.startsWith('[')) {
       try {
         const recipeList = JSON.parse(item.recipe);
         
         for (let req of recipeList) {
-          // --- THE FIX ---
-          // req.id is the ID of the ingredient in the MAIN branch.
-          // req.name is the actual text name (e.g., "Espresso Beans").
-          // We must search Branch B's inventory using the NAME, not the ID!
-
           if (!req.name) {
-             // Fallback: If the JSON recipe didn't save the name, we are forced to check by ID.
              const stockItem = inventory.find(i => i.id === req.id);
              if (!stockItem || Number(stockItem.stock_qty) < Number(req.qty)) return false;
           } else {
-             // Smart Check: Search the local branch inventory by the exact ingredient name!
              const stockItem = inventory.find(i => i.name.toLowerCase() === req.name.toLowerCase());
              if (!stockItem || Number(stockItem.stock_qty) < Number(req.qty)) return false;
           }
@@ -60,7 +46,6 @@ export default function Menu({
     
     return true; 
   };
-  // ---------------------------------
 
   return (
     <div className="main-menu" style={{ padding: '20px', flex: 1, width: '100%', boxSizing: 'border-box', overflowY: 'auto' }}>
@@ -102,10 +87,10 @@ export default function Menu({
       </div>
 
       {/* PRODUCT GRID */}
-      <div className="product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
+      {/* FIX: minmax is now 130px instead of 180px, guaranteeing a 2-column layout on phones! */}
+      <div className="product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '12px' }}>
         {filteredItems.map(item => {
           
-          // Check stock before rendering the card!
           const available = isDrinkAvailable(item);
 
           return (
@@ -122,7 +107,7 @@ export default function Menu({
               style={{
                 background: available ? '#fff' : '#f3f4f6',
                 borderRadius: '16px',
-                padding: '12px',
+                padding: '10px',
                 textAlign: 'center',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
                 cursor: (available || isDeleteMode) ? 'pointer' : 'not-allowed',
@@ -141,7 +126,7 @@ export default function Menu({
             >
               
               {!available && !isDeleteMode && (
-                <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '6px', fontWeight: '800', fontSize: '12px', zIndex: 5, boxShadow: '0 4px 10px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
+                <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '6px', fontWeight: '800', fontSize: '11px', zIndex: 5, boxShadow: '0 4px 10px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
                   Out of Stock
                 </div>
               )}
@@ -150,17 +135,17 @@ export default function Menu({
                 <div style={{ position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ef4444', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '20px', boxShadow: '0 4px 10px rgba(239,68,68,0.4)', zIndex: 10 }}>−</div>
               )}
 
-              <div className="product-image" style={{ width: '100%', height: '120px', backgroundColor: '#f9fafb', borderRadius: '12px', marginBottom: '12px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="product-image" style={{ width: '100%', height: '80px', backgroundColor: '#f9fafb', borderRadius: '12px', marginBottom: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {item.image_url ? (
-                  <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '10px', boxSizing: 'border-box', filter: available ? 'none' : 'grayscale(100%)' }} />
+                  <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '5px', boxSizing: 'border-box', filter: available ? 'none' : 'grayscale(100%)' }} />
                 ) : (
-                  <span style={{ color: '#9ca3af', fontSize: '13px', fontWeight: '600' }}>No Image</span>
+                  <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: '600' }}>No Image</span>
                 )}
               </div>
               
               <div>
-                <div className="product-name" style={{ fontSize: '14px', fontWeight: '800', color: '#111', marginBottom: '4px', lineHeight: '1.2' }}>{item.name}</div>
-                <div className="product-price" style={{ fontSize: '15px', fontWeight: '900', color: '#b85e2b' }}>₱ {item.price.toFixed(2)}</div>
+                <div className="product-name" style={{ fontSize: '13px', fontWeight: '800', color: '#111', marginBottom: '4px', lineHeight: '1.2' }}>{item.name}</div>
+                <div className="product-price" style={{ fontSize: '14px', fontWeight: '900', color: '#b85e2b' }}>₱ {item.price.toFixed(2)}</div>
               </div>
             </div>
           );

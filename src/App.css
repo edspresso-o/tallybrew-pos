@@ -1,42 +1,210 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* =========================================================
+   NATIVE APP FEEL: Prevent long-press highlights & popups
+========================================================= */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  -webkit-touch-callout: none; 
+  -webkit-user-select: none;   
+  -moz-user-select: none;      
+  -ms-user-select: none;       
+  user-select: none;   
+  touch-action: manipulation; /* Disables double-tap to zoom! */        
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+/* Re-enable for inputs, or cashiers won't be able to type! */
+input, textarea, select {
+  -webkit-user-select: auto;
+  -moz-user-select: auto;
+  -ms-user-select: auto;
+  user-select: auto;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Stop bouncy overscroll */
+  background-color: #FDFBF7;
+}
+
+body {
+  color: #333;
+  font-size: 16px; 
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1cbc7; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #b85e2b; }
+
+/* ANIMATIONS */
+@keyframes popIn { 0% { opacity: 0; transform: scale(0.9); filter: blur(5px); } 100% { opacity: 1; transform: scale(1); filter: blur(0); } }
+
+.pos-container { 
+  display: flex; 
+  width: 100%;
+  height: 100%;
+  height: 100dvh; 
+  overflow: hidden; 
+}
+
+/* =========================================================
+   DESKTOP / iPAD CART ENGINE (Side-by-Side Layout)
+========================================================= */
+.responsive-cart-wrapper { 
+  width: 380px; 
+  min-width: 380px;
+  height: 100%; 
+  background: #fff; 
+  border-left: 2px solid #E6D0A9;
+  display: flex; 
+  flex-direction: column; 
+  z-index: 10;
+  box-shadow: -4px 0 15px rgba(59,34,19,0.03);
+}
+
+.mobile-cart-fab { display: none; }
+.mobile-cart-close-btn { display: none; }
+
+/* =========================================================
+   RESPONSIVE DESIGN (TABLETS - Max 1024px)
+========================================================= */
+.mobile-nav-toggle { display: none; position: absolute; top: 25px; left: 20px; z-index: 900; background: #0a0a0a; color: #fff; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+.sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 998; backdrop-filter: blur(2px); }
+
+@media (max-width: 1024px) {
+  .mobile-nav-toggle { display: block; }
+  .sidebar-overlay.open { display: block; }
+  .sidebar-container { position: fixed !important; left: -300px !important; top: 0; bottom: 0; z-index: 999 !important; transition: left 0.3s ease-in-out !important; }
+  .sidebar-container.open { left: 0 !important; }
+}
+
+/* =========================================================
+   MASTER MOBILE ENGINE (SMARTPHONES - Max 850px)
+========================================================= */
+@media (max-width: 850px) {
+  
+  /* 1. Dashboard Layout Adjustments */
+  .scrollable-view { 
+    padding: 80px 15px 110px 15px !important; 
+    overflow-x: hidden; 
+    width: 100vw !important;
+    box-sizing: border-box !important;
   }
-  to {
-    transform: rotate(360deg);
+
+  .admin-edit-bar {
+    top: auto !important;
+    bottom: 90px !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    width: 92% !important;
+    max-width: 400px !important;
+    padding: 8px 20px !important;
+    justify-content: space-between !important;
   }
-}
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+  /* 2. STRICT 2x2 MENU GRID FOR MOBILE */
+  .product-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
   }
-}
+  
+  .product-card {
+     min-width: 0 !important; 
+     width: 100% !important;
+     padding: 12px 8px !important;
+     margin: 0 !important;
+     box-sizing: border-box !important;
+  }
+  
+  .product-image { height: 75px !important; margin-bottom: 8px !important; }
+  .product-name { font-size: 13px !important; }
+  .product-price { font-size: 14px !important; }
 
-.card {
-  padding: 2em;
-}
+  /* 3. THE CART FIX (Push to Bottom) */
+  .responsive-cart-wrapper { 
+    position: fixed !important; 
+    top: 0 !important; 
+    bottom: 0 !important;
+    right: -100vw !important; 
+    width: 100vw !important; 
+    height: 100dvh !important;
+    background: #fff !important;
+    z-index: 10005 !important; 
+    display: flex !important;
+    flex-direction: column !important;
+    transition: right 0.3s ease !important; 
+    box-shadow: none !important; 
+    border: none !important;
+  }
+  .responsive-cart-wrapper.open { right: 0 !important; }
 
-.read-the-docs {
-  color: #888;
+  .mobile-cart-close-btn { 
+    display: flex !important; 
+    flex: 0 0 auto !important;
+    background: #3B2213 !important; 
+    color: #E6D0A9 !important; 
+    border: none !important; 
+    padding: 20px 15px !important; 
+    font-weight: 900 !important; 
+    font-size: 16px !important; 
+    text-transform: uppercase !important; 
+    cursor: pointer !important; 
+    align-items: center !important; 
+    justify-content: flex-start !important; 
+    gap: 10px !important; 
+    width: 100% !important; 
+  }
+
+  .cart-panel {
+     width: 100% !important;
+     flex: 1 1 auto !important;
+     display: flex !important;
+     flex-direction: column !important;
+     height: auto !important;
+     padding: 0 !important;
+     border: none !important;
+  }
+
+  .cart-header { 
+    flex: 0 0 auto !important; 
+    padding: 15px !important; 
+    margin: 0 !important;
+  }
+
+  .cart-items {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    padding: 15px !important;
+  }
+
+  /* --- FIX: Increased Bottom Padding --- */
+  .cart-summary {
+    flex: 0 0 auto !important;
+    padding: 15px !important;
+    padding-bottom: calc(50px + env(safe-area-inset-bottom)) !important; /* Forces 50px of padding below the button */
+    margin: 0 !important;
+    background: #fff !important;
+    box-shadow: 0 -10px 20px rgba(0,0,0,0.06) !important;
+  }
+  
+  .mobile-cart-fab { 
+    display: flex; position: fixed; 
+    bottom: calc(20px + env(safe-area-inset-bottom)) !important; 
+    left: 50% !important; transform: translateX(-50%) !important; 
+    background: #3B2213; color: #fff; padding: 16px 24px; border-radius: 30px; font-size: 15px; font-weight: 900; 
+    box-shadow: 0 8px 20px rgba(59,34,19,0.4); border: 2px solid #E6D0A9; z-index: 990 !important; 
+    align-items: center; justify-content: center !important; gap: 10px; cursor: pointer; 
+    width: 90% !important; max-width: 350px !important; 
+  }
+  
+  .mobile-only-overlay { display: none !important; }
 }
