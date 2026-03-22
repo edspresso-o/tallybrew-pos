@@ -35,26 +35,9 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
 
   const isAdmin = activeCashier?.role === 'admin' || activeCashier?.role === 'manager';
 
-  // THE SAFARI FIX: Safely parse dates so iPhones and iPads stop crashing to a white screen.
-  const formatSafeTime = (dateString) => {
-    if (!dateString) return 'Not Clocked In';
-    try {
-      const safeString = dateString.replace(' ', 'T'); // Apple requires 'T' in dates
-      const d = new Date(safeString);
-      return isNaN(d.getTime()) ? 'Unknown Time' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) { return 'Error'; }
-  };
-
-  const formatSafeDate = (dateString) => {
-    if (!dateString) return 'Unknown Date';
-    try {
-      const safeString = dateString.replace(' ', 'T');
-      const d = new Date(safeString);
-      return isNaN(d.getTime()) ? 'Invalid Date' : d.toLocaleDateString();
-    } catch (e) { return 'Error'; }
-  };
-
-  const formattedStartTime = formatSafeTime(activeShift?.start_time);
+  const formattedStartTime = activeShift 
+    ? new Date(activeShift.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : 'Not Clocked In';
 
   useEffect(() => {
     if (isAdmin) {
@@ -71,32 +54,26 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
 
   const fetchShiftLogs = async () => {
     setLoadingLogs(true);
-    try {
-      let query = supabase.from('shifts').select('*').eq('status', 'closed').order('end_time', { ascending: false });
-      if (branchId && branchId !== 'admin_remote') query = query.eq('branch_id', branchId);
-      const { data } = await query;
-      if (data) setShiftLogs(data);
-    } catch(e) { console.error("Log error", e); }
+    let query = supabase.from('shifts').select('*').eq('status', 'closed').order('end_time', { ascending: false });
+    if (branchId && branchId !== 'admin_remote') query = query.eq('branch_id', branchId);
+    const { data } = await query;
+    if (data) setShiftLogs(data);
     setLoadingLogs(false);
   };
 
   const fetchBranches = async () => {
     setLoadingBranches(true);
-    try {
-      const { data } = await supabase.from('branches').select('*').order('name');
-      if (data) setBranches(data);
-    } catch(e) { console.error("Branch error", e); }
+    const { data } = await supabase.from('branches').select('*').order('name');
+    if (data) setBranches(data);
     setLoadingBranches(false);
   };
 
   const fetchStaff = async () => {
     setLoadingStaff(true);
-    try {
-      let query = supabase.from('profiles').select('*').order('username');
-      if (branchId && branchId !== 'admin_remote') query = query.eq('branch_id', branchId);
-      const { data } = await query;
-      if (data) setStaffList(data);
-    } catch(e) { console.error("Staff error", e); }
+    let query = supabase.from('profiles').select('*').order('username');
+    if (branchId && branchId !== 'admin_remote') query = query.eq('branch_id', branchId);
+    const { data } = await query;
+    if (data) setStaffList(data);
     setLoadingStaff(false);
   };
 
@@ -106,13 +83,13 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
 
     setIsSkimming(true);
     try {
-      const currentDrops = Number(activeShift?.cash_drops || 0);
+      const currentDrops = Number(activeShift.cash_drops || 0);
       const newTotalDrops = currentDrops + dropAmount;
 
       const { error } = await supabase
         .from('shifts')
         .update({ cash_drops: newTotalDrops })
-        .eq('id', activeShift?.id);
+        .eq('id', activeShift.id);
 
       if (error) throw error;
 
@@ -136,7 +113,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
       return;
     }
     try {
-      const { error } = await supabase.from('profiles').update({ pin: newPin }).eq('username', activeCashier?.username);
+      const { error } = await supabase.from('profiles').update({ pin: newPin }).eq('username', activeCashier.username);
       if (error) throw error;
       setIsError(false);
       setStatusMsg("Success! Your personal PIN has been updated.");
@@ -212,7 +189,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
     }
   };
 
-  const formatMoney = (amount) => `₱ ${Number(amount || 0).toFixed(2)}`;
+  const formatMoney = (amount) => `₱ ${Number(amount).toFixed(2)}`;
   
   const getBranchName = (bId) => {
     if (!bId || bId === 'main') return 'Main Branch'; 
@@ -221,46 +198,105 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
   };
 
   return (
-    <div style={{ padding: '40px', paddingTop: '80px', backgroundColor: '#FDFBF7', minHeight: '100vh', width: '100%', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
+    // FIX: Added 'paddingTop: 60px' here to drop everything safely below the hamburger menu!
+    <div style={{ padding: '40px', paddingTop: '60px', backgroundColor: '#FDFBF7', minHeight: '100vh', width: '100%', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
       
+      {/* REDESIGNED: SKIM MODAL POPUP */}
       {showSkimModal && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ width: '90%', maxWidth: '400px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+          
+          {/* CSS to hide the ugly number input arrows just for this modal */}
+          <style>{`
+            .hide-arrows::-webkit-outer-spin-button,
+            .hide-arrows::-webkit-inner-spin-button {
+              -webkit-appearance: none;
+              margin: 0;
+            }
+            .hide-arrows {
+              -moz-appearance: textfield;
+            }
+          `}</style>
+
+          <div style={{ width: '400px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+            
             <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#B56124" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
             </div>
+
             <h2 style={{ fontSize: '26px', fontWeight: '900', margin: '0 0 10px', color: '#3B2213', letterSpacing: '-0.5px' }}>Record Cash Drop</h2>
+            
             <p style={{ color: '#3B2213', fontSize: '14px', marginBottom: '30px', fontWeight: '600', opacity: 0.8, lineHeight: '1.4' }}>
               Remove excess cash from the drawer for security. This will be deducted from your expected end-of-shift cash.
             </p>
+
             <div style={{ position: 'relative', width: '100%', marginBottom: '30px', textAlign: 'left', background: '#FDFBF7', borderRadius: '16px', border: '2px solid #B56124', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 0 0 3px rgba(181,97,36,0.2)' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '12px', fontWeight: '800', color: '#B56124', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Amount to Drop (₱)</div>
-                <input type="number" value={skimAmount} onChange={(e) => setSkimAmount(e.target.value)} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', fontSize: '32px', fontWeight: '900', color: '#3B2213', padding: 0 }} autoFocus />
+                <input 
+                  className="hide-arrows" 
+                  type="number" 
+                  value={skimAmount} 
+                  onChange={(e) => setSkimAmount(e.target.value)} 
+                  placeholder="0.00" 
+                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', fontSize: '32px', fontWeight: '900', color: '#3B2213', padding: 0 }} 
+                  autoFocus 
+                />
               </div>
             </div>
+
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={() => {setShowSkimModal(false); setSkimAmount('');}} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#FDFBF7', color: '#3B2213', fontWeight: '900', fontSize: '15px', cursor: 'pointer' }}>Cancel</button>
               <button onClick={handleRecordSkim} disabled={isSkimming || !skimAmount} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#3B2213', color: '#FDFBF7', fontWeight: '900', fontSize: '15px', cursor: (!skimAmount || isSkimming) ? 'not-allowed' : 'pointer', opacity: (!skimAmount || isSkimming) ? 0.6 : 1, boxShadow: '0 4px 12px rgba(59, 34, 19, 0.3)' }}>{isSkimming ? 'Saving...' : 'Drop Cash'}</button>
             </div>
+
           </div>
         </div>
       )}
 
       <div style={{ marginBottom: '30px', textAlign: 'left' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>Account Settings</h1>
-        <p style={{ color: '#6b7280', fontSize: '15px', margin: 0, fontWeight: '500' }}>Manage your profile, active register, and system logs.</p>
+        <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>
+          Account Settings
+        </h1>
+        <p style={{ color: '#6b7280', fontSize: '15px', margin: 0, fontWeight: '500' }}>
+          Manage your profile, active register, and system logs.
+        </p>
       </div>
 
       {/* TABS */}
       <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '30px', borderBottom: '2px solid #e5e7eb', marginBottom: '30px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div onClick={() => setActiveTab('shift')} style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'shift' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'shift' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}>My Shift</div>
-        <div onClick={() => setActiveTab('security')} style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'security' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'security' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}>Security PIN</div>
+        <div 
+          onClick={() => setActiveTab('shift')}
+          style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'shift' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'shift' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+        >
+          My Shift
+        </div>
+        <div 
+          onClick={() => setActiveTab('security')}
+          style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'security' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'security' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+        >
+          Security PIN
+        </div>
+        
         {isAdmin && (
           <>
-            <div onClick={() => setActiveTab('history')} style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'history' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'history' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}>Shift History</div>
-            <div onClick={() => setActiveTab('locations')} style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'locations' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'locations' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}>Manage Locations</div>
-            <div onClick={() => setActiveTab('staff')} style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'staff' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'staff' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}>Manage Staff</div>
+            <div 
+              onClick={() => setActiveTab('history')}
+              style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'history' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'history' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+            >
+              Shift History
+            </div>
+            <div 
+              onClick={() => setActiveTab('locations')}
+              style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'locations' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'locations' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+            >
+              Manage Locations
+            </div>
+            <div 
+              onClick={() => setActiveTab('staff')}
+              style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'staff' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'staff' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
+            >
+              Manage Staff
+            </div>
           </>
         )}
       </div>
@@ -283,9 +319,10 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
             
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', padding: '16px 20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
               <span style={{ color: '#6b7280', fontWeight: '700', fontSize: '14px' }}>Starting Float:</span>
-              <span style={{ color: '#B56124', fontWeight: '900', fontSize: '14px' }}>{formatMoney(activeShift?.starting_cash)}</span>
+              <span style={{ color: '#B56124', fontWeight: '900', fontSize: '14px' }}>{formatMoney(activeShift?.starting_cash || 0)}</span>
             </div>
 
+            {/* Display total skimmed cash if they have dropped any */}
             {Number(activeShift?.cash_drops || 0) > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', padding: '16px 20px', background: '#fef2f2', borderRadius: '16px', border: '1px dashed #fecaca' }}>
                 <span style={{ color: '#dc2626', fontWeight: '700', fontSize: '14px' }}>Total Cash Dropped:</span>
@@ -366,8 +403,10 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
           ) : shiftLogs.length === 0 ? (
             <p style={{ color: '#6b7280', fontWeight: '500' }}>No closed shifts found in the database.</p>
           ) : (
+            
             <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto', borderRadius: '16px', border: '1px solid #e5e7eb', WebkitOverflowScrolling: 'touch' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '850px', position: 'relative' }}>
+                
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                   <tr style={{ textAlign: 'left', backgroundColor: '#FDFBF7' }}>
                     <th style={{ padding: '18px 15px', fontSize: '12px', fontWeight: '900', color: '#B56124', textTransform: 'uppercase', borderBottom: '2px solid #3B2213' }}>Date</th>
@@ -382,15 +421,18 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
 
                 <tbody>
                   {shiftLogs.map((log, index) => {
+                    const startDate = new Date(log.start_time);
+                    const endDate = new Date(log.end_time);
                     const shortage = Number(log.shortage);
+
                     return (
                       <tr key={log.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: index % 2 === 0 ? '#fff' : '#fafafa', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#F5E8D2'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#fff' : '#fafafa'}>
-                        <td style={{ padding: '16px 15px', fontSize: '14px', fontWeight: '600', color: '#3B2213' }}>{formatSafeDate(log.start_time)}</td>
+                        <td style={{ padding: '16px 15px', fontSize: '14px', fontWeight: '600', color: '#3B2213' }}>{startDate.toLocaleDateString()}</td>
                         <td style={{ padding: '16px 15px', fontSize: '14px', fontWeight: '800', color: '#B56124' }}>{getBranchName(log.branch_id)}</td>
                         <td style={{ padding: '16px 15px', fontSize: '14px', fontWeight: '800', color: '#3B2213' }}>{log.cashier_name}</td>
                         <td style={{ padding: '16px 15px', fontSize: '13px', fontWeight: '500', color: '#6b7280' }}>
-                          {formatSafeTime(log.start_time)} - <br/>
-                          {formatSafeTime(log.end_time)}
+                          {startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - <br/>
+                          {endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td style={{ padding: '16px 15px', fontSize: '14px', fontWeight: '800', color: '#111' }}>{formatMoney(log.expected_cash)}</td>
                         <td style={{ padding: '16px 15px', fontSize: '14px', fontWeight: '800', color: '#111' }}>{formatMoney(log.actual_cash)}</td>
@@ -509,7 +551,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
                 {staffList.map(staff => (
                   <div key={staff.id} style={{ display: 'flex', alignItems: 'center', padding: '20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
                     <div style={{ width: '45px', height: '45px', borderRadius: '50%', background: staff.role === 'manager' || staff.role === 'admin' ? '#B56124' : '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginRight: '15px', fontWeight: '900', boxShadow: '0 4px 8px rgba(59,34,19,0.15)', flexShrink: 0 }}>
-                      {String(staff.username || '').charAt(0).toUpperCase() || '?'}
+                      {staff.username.charAt(0).toUpperCase()}
                     </div>
                     <div style={{ minWidth: 0, overflow: 'hidden' }}>
                       <div style={{ color: '#3B2213', fontWeight: '900', fontSize: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{staff.username}</div>
