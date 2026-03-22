@@ -1,5 +1,45 @@
 import React, { useState } from 'react';
 
+// --- ULTRA-CLEAN SKELETON FADE IMAGE COMPONENT ---
+const SmoothMenuImage = ({ src, alt, available }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // If there is no image URL, or the link is broken, show JUST a pure white background
+  if (!src || hasError) {
+    return <div style={{ width: '100%', height: '100%', backgroundColor: '#ffffff' }}></div>;
+  }
+
+  return (
+    <div style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#ffffff', overflow: 'hidden' }}>
+      
+      {/* The Placeholder: Shows a pure white box while downloading */}
+      {!isLoaded && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#ffffff' }}></div>
+      )}
+      
+      {/* The Real Image: Hidden until fully downloaded, then fades in smoothly */}
+      <img
+        src={src}
+        alt={alt}
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setHasError(true)}
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          objectFit: 'contain', 
+          padding: '5px', 
+          boxSizing: 'border-box',
+          opacity: isLoaded ? 1 : 0, 
+          transition: 'opacity 0.4s ease-in-out',
+          // Applies your original black-and-white filter if it's out of stock
+          filter: available ? 'none' : 'grayscale(100%)' 
+        }}
+      />
+    </div>
+  );
+};
+
 export default function Menu({ 
   menuItems, 
   categories, 
@@ -87,7 +127,6 @@ export default function Menu({
       </div>
 
       {/* PRODUCT GRID */}
-      {/* FIX: minmax is now 130px instead of 180px, guaranteeing a 2-column layout on phones! */}
       <div className="product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '12px' }}>
         {filteredItems.map(item => {
           
@@ -135,12 +174,9 @@ export default function Menu({
                 <div style={{ position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ef4444', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '20px', boxShadow: '0 4px 10px rgba(239,68,68,0.4)', zIndex: 10 }}>−</div>
               )}
 
-              <div className="product-image" style={{ width: '100%', height: '80px', backgroundColor: '#f9fafb', borderRadius: '12px', marginBottom: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {item.image_url ? (
-                  <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '5px', boxSizing: 'border-box', filter: available ? 'none' : 'grayscale(100%)' }} />
-                ) : (
-                  <span style={{ color: '#9ca3af', fontSize: '12px', fontWeight: '600' }}>No Image</span>
-                )}
+              <div className="product-image" style={{ width: '100%', height: '80px', backgroundColor: '#ffffff', borderRadius: '12px', marginBottom: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {/* PURE WHITE SKELETON FADE COMPONENT */}
+                <SmoothMenuImage src={item.image_url} alt={item.name} available={available} />
               </div>
               
               <div>

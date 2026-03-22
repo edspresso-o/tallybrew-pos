@@ -263,11 +263,15 @@ function App() {
           <Sidebar currentView={currentView} setCurrentView={handleNavigationRequest} activeCashier={activeCashier} isMobileNavOpen={isMobileNavOpen} setIsMobileNavOpen={setIsMobileNavOpen} activeShift={activeShift} />
           
           <div className="main-content" style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
-            {currentView === 'Dashboard' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '20px' }}><Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} /></div>}
-            {currentView === 'Kitchen' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '20px' }}><KitchenDisplay /></div>}
+            
+            {/* FIX: Removed top padding entirely so the Dashboard sits perfectly flush */}
+            {currentView === 'Dashboard' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: '0px' }}><Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} /></div>}
+            
+            {currentView === 'Kitchen' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><KitchenDisplay /></div>}
+            
             {currentView === 'Menu' && (
               <>
-                <div className="scroll-container" style={{ flex: 1, height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '20px', paddingBottom: '100px' }}>
+                <div className="scroll-container" style={{ flex: 1, height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px', paddingBottom: '100px' }}>
                   <Menu menuItems={displayedItems} categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} addToCart={handleItemClick} onManageClick={() => setIsAddProductOpen(true)} deleteProduct={requestDeleteProduct} editProduct={setEditingProduct} inventory={inventory} recipes={recipes} />
                 </div>
                 {isMobileCartOpen && ( <div onClick={() => setIsMobileCartOpen(false)} style={{position: 'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(59, 34, 19, 0.6)', backdropFilter: 'blur(3px)', zIndex: 999}} className="mobile-only-overlay"></div> )}
@@ -284,11 +288,12 @@ function App() {
                 <button className="mobile-cart-fab no-print" onClick={() => setIsMobileCartOpen(true)}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>View Cart ({cart.reduce((sum, item) => sum + item.qty, 0)})</button>
               </>
             )}
-            {currentView === 'Transactions' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '20px' }}><Transactions sales={sales} onVoidSale={requestVoidSale} activeCashier={activeCashier} /></div>}
-            {currentView === 'Inventory' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '20px' }}><Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} /></div>}
             
-            {/* THE BUG FIX: Changed requestEndShift to prepareEndShift on the line below */}
-            {currentView === 'Settings' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '20px' }}><Settings activeCashier={activeCashier} activeShift={activeShift} onUpdateShift={setActiveShift} onPrepareEndShift={prepareEndShift} branchId={effectiveBranch} /></div>}
+            {currentView === 'Transactions' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><Transactions sales={sales} onVoidSale={requestVoidSale} activeCashier={activeCashier} /></div>}
+            
+            {currentView === 'Inventory' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} /></div>}
+            
+            {currentView === 'Settings' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><Settings activeCashier={activeCashier} activeShift={activeShift} onUpdateShift={setActiveShift} onPrepareEndShift={prepareEndShift} branchId={effectiveBranch} /></div>}
           
           </div>
         </div>
