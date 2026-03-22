@@ -1,99 +1,65 @@
 import React, { useState, useEffect } from 'react';
 
 export default function ManualRestock({ isOpen, onClose, menuItems, onRestock, preselectedItem }) {
-  const [selectedId, setSelectedId] = useState('');
-  const [addQty, setAddQty] = useState('');
+  const [selectedItem, setSelectedItem] = useState('');
+  const [qty, setQty] = useState('');
   const [invoice, setInvoice] = useState('');
 
   useEffect(() => {
     if (preselectedItem) {
-      setSelectedId(String(preselectedItem.id)); 
-      
-      // --- THIS LINE IS UPDATED: Auto-fill the invoice box with the SKU! ---
-      setInvoice(preselectedItem.sku || ''); 
-      
-    } else {
-      setSelectedId('');
-      setInvoice('');
+      setSelectedItem(preselectedItem.id);
+      if (preselectedItem.sku) setInvoice(preselectedItem.sku);
     }
-    setAddQty('');
-  }, [preselectedItem, isOpen]);
+  }, [preselectedItem]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const item = menuItems.find(i => i.id.toString() === selectedItem.toString());
+    if (!item || !qty) return;
+    const newStock = Number(item.stock_qty || 0) + Number(qty);
+    onRestock(item.id, newStock, invoice);
+  };
 
   if (!isOpen) return null;
 
-  const handleSubmit = () => {
-    const item = menuItems.find(i => String(i.id) === String(selectedId));
-    
-    if (!item || !addQty) {
-      alert("Please select an item and enter a quantity.");
-      return;
-    }
-    
-    const newTotal = Number(item.stock_qty) + Number(addQty);
-    
-    onRestock(selectedId, newTotal, invoice);
-  };
-
   return (
-    <div className="popup-overlay" style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)' }}>
-      <div className="add-product-popup" style={{ width: '400px', borderRadius: '20px', padding: '30px', backgroundColor: '#fff', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+    // FIX: Using flex centering and 20px padding to keep it perfectly in the middle
+    <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10005, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
+      <div style={{ backgroundColor: '#fff', borderRadius: '24px', padding: '30px', width: '100%', maxWidth: '400px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', boxSizing: 'border-box' }}>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, color: '#111' }}>Restock Inventory</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#aaa', cursor: 'pointer' }}>&times;</button>
+          <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '900', color: '#111' }}>Restock Inventory</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', fontWeight: 'bold' }}>&times;</button>
         </div>
-
-        {/* Item Selection */}
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#888', textTransform: 'uppercase', marginBottom: '8px' }}>Select Item</label>
-          <select 
-            value={selectedId} 
-            onChange={(e) => setSelectedId(e.target.value)}
-            style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '14px', fontWeight: '700', outline: 'none', backgroundColor: '#fafafa' }}
-          >
-            <option value="" disabled>-- Choose an item --</option>
-            {menuItems.map(item => (
-              <option key={item.id} value={item.id}>
-                {item.name} (Current: {item.stock_qty} {item.unit})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
-          {/* Quantity to Add */}
-          <div style={{ flex: 1 }}>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#888', textTransform: 'uppercase', marginBottom: '8px' }}>Qty to Add</label>
-            <input 
-              type="number" 
-              placeholder="e.g. 50" 
-              value={addQty} 
-              onChange={(e) => setAddQty(e.target.value)}
-              style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '16px', fontWeight: '800', outline: 'none', backgroundColor: '#fafafa' }}
-              autoFocus
-            />
+        
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#9ca3af', marginBottom: '8px', textTransform: 'uppercase' }}>Select Item</label>
+            <select value={selectedItem} onChange={e => setSelectedItem(e.target.value)} required style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '15px', fontWeight: '600', outline: 'none' }}>
+              <option value="" disabled>-- Choose an item --</option>
+              {menuItems.map(item => (
+                <option key={item.id} value={item.id}>{item.name} ({item.stock_qty} {item.unit})</option>
+              ))}
+            </select>
           </div>
 
-          {/* Supplier Invoice */}
-          <div style={{ flex: 1 }}>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#888', textTransform: 'uppercase', marginBottom: '8px' }}>Supplier Invoice / SKU</label>
-            <input 
-              type="text" 
-              placeholder="#INV-001" 
-              value={invoice} 
-              onChange={(e) => setInvoice(e.target.value)}
-              style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '14px', fontWeight: '700', outline: 'none', backgroundColor: '#fafafa', color: '#b85e2b' }}
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#9ca3af', marginBottom: '8px', textTransform: 'uppercase' }}>Qty to Add</label>
+              <input type="number" value={qty} onChange={e => setQty(e.target.value)} required placeholder="e.g. 50" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '15px', fontWeight: '600', boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+            <div>
+              {/* FIX: Forces long labels to truncate neatly with '...' so they don't break the row */}
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#9ca3af', marginBottom: '8px', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Supplier / SKU</label>
+              <input type="text" value={invoice} onChange={e => setInvoice(e.target.value)} placeholder="#INV-001" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '15px', fontWeight: '600', boxSizing: 'border-box', outline: 'none' }} />
+            </div>
           </div>
-        </div>
 
-        <button 
-          onClick={handleSubmit} 
-          disabled={!selectedId || !addQty}
-          style={{ width: '100%', padding: '16px', borderRadius: '10px', border: 'none', backgroundColor: (!selectedId || !addQty) ? '#e5e7eb' : '#b85e2b', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: (!selectedId || !addQty) ? 'not-allowed' : 'pointer', marginTop: '10px', transition: '0.2s' }}
-        >
-          CONFIRM RESTOCK
-        </button>
+          <button type="submit" disabled={!selectedItem || !qty} style={{ width: '100%', padding: '16px', borderRadius: '12px', border: 'none', background: (!selectedItem || !qty) ? '#e5e7eb' : '#b85e2b', color: (!selectedItem || !qty) ? '#9ca3af' : '#fff', fontWeight: '900', fontSize: '16px', cursor: (!selectedItem || !qty) ? 'not-allowed' : 'pointer', marginTop: '10px' }}>
+            CONFIRM RESTOCK
+          </button>
+        </form>
+
       </div>
     </div>
   );

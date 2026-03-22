@@ -67,7 +67,8 @@ export default function KitchenDisplay() {
   }
 
   return (
-    <div style={{ padding: '40px', backgroundColor: '#FDFBF7', minHeight: '100%', width: '100%', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
+    // FIX: Added paddingTop: '60px' to dodge the hamburger menu
+    <div style={{ padding: '20px', paddingTop: '60px', backgroundColor: '#FDFBF7', minHeight: '100%', width: '100%', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
       
       <style>{`
         @keyframes pulseUrgent {
@@ -81,7 +82,8 @@ export default function KitchenDisplay() {
         .order-card { transition: all 0.3s ease; }
       `}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', textAlign: 'left' }}>
+      {/* FIX: Added flexWrap: 'wrap' and gap: '15px' so the clock stacks on mobile */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: '30px', textAlign: 'left' }}>
         <div>
           <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>
             Kitchen Display
@@ -104,7 +106,7 @@ export default function KitchenDisplay() {
            <p style={{ color: '#3B2213', fontSize: '16px', fontWeight: '600' }}>The kitchen queue is empty.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
           {orders.map((order) => {
             const elapsed = getElapsedSeconds(order.created_at);
             
@@ -155,7 +157,7 @@ export default function KitchenDisplay() {
                   boxShadow: '0 10px 25px rgba(59,34,19,0.05)',
                   display: 'flex',
                   flexDirection: 'column',
-                  textAlign: 'left', // <-- FIXED: Forces everything inside to align left
+                  textAlign: 'left',
                   animation: `${statusConfig.animation}, fadeIn 0.3s ease-out`
                 }}
               >

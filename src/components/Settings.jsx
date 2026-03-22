@@ -198,7 +198,8 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
   };
 
   return (
-    <div style={{ padding: '40px', backgroundColor: '#FDFBF7', minHeight: '100vh', width: '100%', fontFamily: "'Inter', sans-serif" }}>
+    // FIX: Added 'paddingTop: 60px' here to drop everything safely below the hamburger menu!
+    <div style={{ padding: '40px', paddingTop: '60px', backgroundColor: '#FDFBF7', minHeight: '100vh', width: '100%', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
       
       {/* REDESIGNED: SKIM MODAL POPUP */}
       {showSkimModal && (
@@ -262,7 +263,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
       </div>
 
       {/* TABS */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '30px', borderBottom: '2px solid #e5e7eb', marginBottom: '30px', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '30px', borderBottom: '2px solid #e5e7eb', marginBottom: '30px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <div 
           onClick={() => setActiveTab('shift')}
           style={{ paddingBottom: '12px', cursor: 'pointer', fontWeight: '800', fontSize: '15px', whiteSpace: 'nowrap', color: activeTab === 'shift' ? '#B56124' : '#9ca3af', borderBottom: activeTab === 'shift' ? '3px solid #B56124' : '3px solid transparent', transition: 'all 0.2s' }}
@@ -306,24 +307,24 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#3B2213', margin: '0 0 25px 0' }}>Current Shift Details</h2>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', padding: '16px 20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
               <span style={{ color: '#6b7280', fontWeight: '700', fontSize: '14px' }}>Active User:</span>
               <span style={{ color: '#3B2213', fontWeight: '800', fontSize: '14px' }}>{activeCashier?.username || 'Unknown'}</span>
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', padding: '16px 20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
               <span style={{ color: '#6b7280', fontWeight: '700', fontSize: '14px' }}>Clocked In At:</span>
               <span style={{ color: '#3B2213', fontWeight: '800', fontSize: '14px' }}>{formattedStartTime}</span>
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', padding: '16px 20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
               <span style={{ color: '#6b7280', fontWeight: '700', fontSize: '14px' }}>Starting Float:</span>
               <span style={{ color: '#B56124', fontWeight: '900', fontSize: '14px' }}>{formatMoney(activeShift?.starting_cash || 0)}</span>
             </div>
 
             {/* Display total skimmed cash if they have dropped any */}
             {Number(activeShift?.cash_drops || 0) > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 20px', background: '#fef2f2', borderRadius: '16px', border: '1px dashed #fecaca' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', padding: '16px 20px', background: '#fef2f2', borderRadius: '16px', border: '1px dashed #fecaca' }}>
                 <span style={{ color: '#dc2626', fontWeight: '700', fontSize: '14px' }}>Total Cash Dropped:</span>
                 <span style={{ color: '#dc2626', fontWeight: '900', fontSize: '14px' }}>- {formatMoney(activeShift?.cash_drops)}</span>
               </div>
@@ -394,7 +395,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
 
       {/* TAB 3: SHIFT HISTORY */}
       {activeTab === 'history' && isAdmin && (
-        <div style={{ background: '#fff', borderRadius: '24px', padding: '35px', boxShadow: '0 10px 30px rgba(59, 34, 19, 0.05)', animation: 'fadeIn 0.3s ease-out', textAlign: 'left' }}>
+        <div style={{ background: '#fff', borderRadius: '24px', padding: '35px', boxShadow: '0 10px 30px rgba(59, 34, 19, 0.05)', animation: 'fadeIn 0.3s ease-out', textAlign: 'left', overflow: 'hidden' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#3B2213', margin: '0 0 20px 0' }}>Shift Logs & Drawer Records</h2>
           
           {loadingLogs ? (
@@ -403,7 +404,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
             <p style={{ color: '#6b7280', fontWeight: '500' }}>No closed shifts found in the database.</p>
           ) : (
             
-            <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto', borderRadius: '16px', border: '1px solid #e5e7eb' }}>
+            <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto', borderRadius: '16px', border: '1px solid #e5e7eb', WebkitOverflowScrolling: 'touch' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '850px', position: 'relative' }}>
                 
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
@@ -439,9 +440,9 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
                           {shortage === 0 ? (
                             <span style={{ color: '#10b981', background: '#ecfdf5', padding: '6px 12px', borderRadius: '8px', border: '1px solid #a7f3d0' }}>Perfect</span>
                           ) : shortage < 0 ? (
-                            <span style={{ color: '#dc2626', background: '#fef2f2', padding: '6px 12px', borderRadius: '8px', border: '1px solid #fecaca' }}>Short: {formatMoney(Math.abs(shortage))}</span>
+                            <span style={{ color: '#dc2626', background: '#fef2f2', padding: '6px 12px', borderRadius: '8px', border: '1px solid #fecaca', whiteSpace: 'nowrap' }}>Short: {formatMoney(Math.abs(shortage))}</span>
                           ) : (
-                            <span style={{ color: '#B56124', background: '#FDFBF7', padding: '6px 12px', borderRadius: '8px', border: '1px solid #E6D0A9' }}>Over: {formatMoney(shortage)}</span>
+                            <span style={{ color: '#B56124', background: '#FDFBF7', padding: '6px 12px', borderRadius: '8px', border: '1px solid #E6D0A9', whiteSpace: 'nowrap' }}>Over: {formatMoney(shortage)}</span>
                           )}
                         </td>
                       </tr>
@@ -468,12 +469,12 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {branches.map(branch => (
                   <div key={branch.id} style={{ display: 'flex', alignItems: 'center', padding: '20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginRight: '15px', fontWeight: '900' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginRight: '15px', fontWeight: '900', flexShrink: 0 }}>
                       B
                     </div>
-                    <div>
-                      <div style={{ color: '#3B2213', fontWeight: '900', fontSize: '16px' }}>{branch.name}</div>
-                      <div style={{ color: '#B56124', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>{branch.location || 'No address set'}</div>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ color: '#3B2213', fontWeight: '900', fontSize: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{branch.name}</div>
+                      <div style={{ color: '#B56124', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{branch.location || 'No address set'}</div>
                     </div>
                   </div>
                 ))}
@@ -549,12 +550,12 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {staffList.map(staff => (
                   <div key={staff.id} style={{ display: 'flex', alignItems: 'center', padding: '20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
-                    <div style={{ width: '45px', height: '45px', borderRadius: '50%', background: staff.role === 'manager' || staff.role === 'admin' ? '#B56124' : '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginRight: '15px', fontWeight: '900', boxShadow: '0 4px 8px rgba(59,34,19,0.15)' }}>
+                    <div style={{ width: '45px', height: '45px', borderRadius: '50%', background: staff.role === 'manager' || staff.role === 'admin' ? '#B56124' : '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginRight: '15px', fontWeight: '900', boxShadow: '0 4px 8px rgba(59,34,19,0.15)', flexShrink: 0 }}>
                       {staff.username.charAt(0).toUpperCase()}
                     </div>
-                    <div>
-                      <div style={{ color: '#3B2213', fontWeight: '900', fontSize: '16px' }}>{staff.username}</div>
-                      <div style={{ color: '#B56124', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ color: '#3B2213', fontWeight: '900', fontSize: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{staff.username}</div>
+                      <div style={{ color: '#B56124', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {staff.role} {branchId === 'admin_remote' ? ` • ${getBranchName(staff.branch_id)}` : ''}
                       </div>
                     </div>
