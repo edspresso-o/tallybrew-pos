@@ -76,7 +76,8 @@ export default function Inventory({ ingredients, onRestockClick, onAddIngredient
                 </tr>
               ) : (
                 ingredients.map((item, index) => {
-                  const isLow = Number(item.stock_qty) <= 100; 
+                  // THE FIX: Changed threshold from 100 to 20
+                  const isLow = Number(item.stock_qty) <= 20; 
                   const sku = `RAW-${(index + 1).toString().padStart(3, '0')}`;
                   
                   return (

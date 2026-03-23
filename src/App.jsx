@@ -235,6 +235,9 @@ function App() {
 
   const displayedItems = activeCategory === 'All' ? menuItems.filter(i => i.category !== 'Add-on' && i.category !== 'Milk') : menuItems;
 
+  // THE FIX: Changed threshold from 15 to 20
+  const lowStockItems = inventory.filter(item => Number(item.stock_qty) <= 20);
+
   return (
     <>
       <style>{`
