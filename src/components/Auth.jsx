@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
+const SECRET_KEY = "TallyBrew@2026_SecureVault_X99!";
+
+const encryptData = (data) => {
+  const text = JSON.stringify(data); let result = '';
+  for (let i = 0; i < text.length; i++) result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+  return btoa(result); 
+};
+
+const decryptData = (encryptedData) => {
+  try {
+    const text = atob(encryptedData); let result = '';
+    for (let i = 0; i < text.length; i++) result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+    return JSON.parse(result);
+  } catch (e) { return null; }
+};
+
 export default function Auth({ isRecovering, onRecoveryComplete }) {
   const [isLogin, setIsLogin] = useState(!isRecovering);
   const [isResetting, setIsResetting] = useState(false); 
@@ -24,7 +40,9 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
 
   useEffect(() => {
     const fetchBranches = async () => {
-      const { data, error } = await supabase.from('branches').select('*');
+      // OFFLINE ENHANCEMENT: Allow login even if we can't fetch branches
+      if (!navigator.onLine) return;
+      const { data } = await supabase.from('branches').select('*');
       if (data) setBranches(data);
     };
     fetchBranches();
@@ -48,9 +66,8 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccessMsg('');
+    if (!navigator.onLine) return setError("You must be online to reset your password.");
+    setLoading(true); setError(''); setSuccessMsg('');
 
     try {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
@@ -67,13 +84,11 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccessMsg('');
+    if (!navigator.onLine) return setError("You must be online to update your password.");
+    setLoading(true); setError(''); setSuccessMsg('');
 
     try {
       if (newPassword.length < 6) throw new Error("Password must be at least 6 characters.");
-      
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
       if (updateError) throw updateError;
       
@@ -85,23 +100,38 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
         else window.location.reload();
       }, 1500);
 
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
   const handleAuth = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccessMsg('');
+    setLoading(true); setError(''); setSuccessMsg('');
 
     try {
-      if (!selectedBranch && !isRecovering) throw new Error("Please select a Store Location first.");
+      if (!selectedBranch && !isRecovering && navigator.onLine) throw new Error("Please select a Store Location first.");
 
       if (isLogin) {
+        
+        // --- SECURE OFFLINE VAULT LOGIC ---
+        if (!navigator.onLine) {
+          const vaultData = localStorage.getItem('tb_offline_vault');
+          if (vaultData) {
+            const vault = decryptData(vaultData);
+            if (vault && vault.email === email && vault.password === password) {
+              if (selectedBranch && vault.branch_id !== selectedBranch) throw new Error("Credentials match, but not for this location.");
+              
+              localStorage.setItem('tallybrew_branch', vault.branch_id);
+              localStorage.setItem('tb_offline_session', 'true'); // Flag to tell App.jsx we are allowed in
+              setSuccessMsg("Offline Vault Unlocked! Logging you in...");
+              setTimeout(() => window.location.reload(), 1000);
+              return;
+            }
+          }
+          throw new Error("No internet connection and no offline vault matches these credentials.");
+        }
+        // ----------------------------------
+
+        // NORMAL ONLINE LOGIC
         const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
         
@@ -109,7 +139,6 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
 
         if (userBranch && userBranch !== selectedBranch) {
           await supabase.auth.signOut(); 
-          
           let intendedLocation = "another location";
           if (userBranch === 'admin_remote') {
             intendedLocation = "💻 Remote Admin (Dashboard Only)";
@@ -117,25 +146,23 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
             const correctBranch = branches.find(b => b.id === userBranch);
             if (correctBranch) intendedLocation = correctBranch.name;
           }
-          
           throw new Error(`Access Denied: This email is strictly locked to ${intendedLocation}.`);
         }
 
+        // SAVE SUCCESSFUL LOGIN TO OFFLINE VAULT
         localStorage.setItem('tallybrew_branch', selectedBranch);
+        localStorage.setItem('tb_offline_vault', encryptData({ email, password, branch_id: selectedBranch }));
+        localStorage.setItem('tb_offline_session', 'true');
+        
         window.location.reload(); 
 
       } else {
+        if (!navigator.onLine) throw new Error("You must be online to create an account.");
         if (!username) throw new Error("Please enter a display name.");
         if (terminalPin.length !== 6) throw new Error("Your Terminal PIN must be exactly 6 digits.");
         
         const { error: signUpError } = await supabase.auth.signUp({ 
-          email, 
-          password,
-          options: {
-            data: {
-              branch_id: selectedBranch 
-            }
-          }
+          email, password, options: { data: { branch_id: selectedBranch } }
         });
         
         if (signUpError) throw signUpError;
@@ -143,27 +170,18 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
         setSuccessMsg("We sent a 6-digit verification code to your email!");
         setAwaitingOtp(true); 
       }
-    } catch (err) { 
-      setError(err.message); 
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    if (!navigator.onLine) return setError("You must be online to verify an account.");
+    setLoading(true); setError('');
 
     try {
       if (otpCode.length !== 6) throw new Error("The verification code must be exactly 6 digits.");
 
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        email,
-        token: otpCode,
-        type: 'signup' 
-      });
-
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({ email, token: otpCode, type: 'signup' });
       if (verifyError) throw verifyError;
 
       if (data?.user) {
@@ -175,13 +193,12 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
 
       setSuccessMsg("Account verified! You are now logged in.");
       localStorage.setItem('tallybrew_branch', selectedBranch);
+      localStorage.setItem('tb_offline_vault', encryptData({ email, password, branch_id: selectedBranch }));
+      localStorage.setItem('tb_offline_session', 'true');
+      
       window.location.reload();
 
-    } catch (err) { 
-      setError(err.message); 
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
   return (
@@ -254,7 +271,7 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
                 value={selectedBranch} 
                 onChange={handleBranchChange} 
                 style={{ ...inputStyle, appearance: 'none', cursor: 'pointer', border: '2px solid #B56124', width: '100%', boxSizing: 'border-box' }} 
-                required
+                required={navigator.onLine}
               >
                 <option value="" disabled>Select Store Location</option>
                 <option value="admin_remote">Remote Admin</option>

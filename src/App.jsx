@@ -169,19 +169,19 @@ function App() {
 
   useEffect(() => { const handleOnline = () => { setIsOnline(true); syncPendingQueue(); }; const handleOffline = () => setIsOnline(false); window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline); const pending = getOfflineQueue(); setPendingSalesCount(pending.length); return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); }; }, []);
   
-  // THE FIX: Listen for PASSWORD_RECOVERY and set isRecovering to true!
   useEffect(() => { 
     supabase.auth.getSession().then(({ data: { session } }) => { 
-      setSession(session); 
-      if (!session) { setActiveCashier(null); setActiveShift(null); } 
+      const isOfflineVault = localStorage.getItem('tb_offline_session') === 'true';
+      setSession(session || isOfflineVault); 
+      if (!session && !isOfflineVault) { setActiveCashier(null); setActiveShift(null); } 
     }); 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => { 
-      // If the email link is clicked, this triggers instantly
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsRecovering(true);
-      }
-      setSession(session); 
-      if (!session) { setActiveCashier(null); setActiveShift(null); } 
+      if (event === 'PASSWORD_RECOVERY') setIsRecovering(true);
+      if (event === 'SIGNED_OUT') localStorage.removeItem('tb_offline_session'); // Clear vault on logout
+      
+      const isOfflineVault = localStorage.getItem('tb_offline_session') === 'true';
+      setSession(session || isOfflineVault); 
+      if (!session && !isOfflineVault) { setActiveCashier(null); setActiveShift(null); } 
     }); 
     return () => subscription.unsubscribe(); 
   }, []);

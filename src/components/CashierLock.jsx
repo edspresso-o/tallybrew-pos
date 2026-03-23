@@ -35,20 +35,23 @@ export default function CashierLock({ onUnlock }) {
     setIsLoading(true);
     const activeBranch = localStorage.getItem('tallybrew_branch');
     
-    // OFFLINE ENHANCEMENT: Load from cache if offline
+    // OFFLINE ENHANCEMENT: Strictly filter by branch to prevent showing all accounts
     if (!navigator.onLine) {
       const cachedProfiles = localStorage.getItem('tb_cache_profiles');
-      if (cachedProfiles) {
+      if (cachedProfiles && activeBranch) {
         const parsedProfiles = decryptData(cachedProfiles);
         if (parsedProfiles && Array.isArray(parsedProfiles)) {
           let filtered = parsedProfiles;
           if (activeBranch === 'admin_remote') {
             filtered = filtered.filter(p => !p.branch_id);
-          } else if (activeBranch) {
-            filtered = filtered.filter(p => p.branch_id === activeBranch);
+          } else {
+            // String conversion ensures the offline check doesn't fail due to type mismatch
+            filtered = filtered.filter(p => String(p.branch_id) === String(activeBranch));
           }
           setCashiers(filtered.sort((a, b) => a.username.localeCompare(b.username)));
         }
+      } else {
+        setCashiers([]); // Hide all if no branch is selected
       }
       setIsLoading(false);
       return;
@@ -65,7 +68,6 @@ export default function CashierLock({ onUnlock }) {
     const { data } = await query;
     if (data) {
       setCashiers(data);
-      // OFFLINE ENHANCEMENT: Cache profiles securely for offline use
       localStorage.setItem('tb_cache_profiles', encryptData(data));
     }
     
@@ -105,8 +107,12 @@ export default function CashierLock({ onUnlock }) {
   };
 
   const handleEmergencyLogout = async () => {
-    if (navigator.onLine) await supabase.auth.signOut();
+    if (navigator.onLine) {
+      try { await supabase.auth.signOut(); } catch (e) {}
+    }
+    // Wipes all location data and completely locks the offline vault
     localStorage.removeItem('tallybrew_branch');
+    localStorage.removeItem('tb_offline_session'); 
     window.location.reload();
   };
 
@@ -189,9 +195,7 @@ export default function CashierLock({ onUnlock }) {
       `}</style>
       
       <div style={{ position: 'relative', width: '70px', height: '70px', marginBottom: '25px' }}>
-        {}
         <div style={{ boxSizing: 'border-box', display: 'block', position: 'absolute', width: '70px', height: '70px', border: '4px solid #E6D0A9', borderRadius: '50%', animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite', borderTopColor: '#B56124' }}></div>
-        {}
         <svg style={{ position: 'absolute', top: '21px', left: '21px', color: '#3B2213', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
           <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>
