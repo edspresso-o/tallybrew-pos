@@ -289,16 +289,11 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
                   <div style={{ textAlign: 'center', marginBottom: '20px' }}>
                     <div style={{ fontWeight: '800', fontSize: '11px', color: '#6b7280', letterSpacing: '1px', marginBottom: '15px' }}>*** {copyType} ***</div>
                     
-                    <h2 style={{ 
-                      margin: '0 0 8px 0', 
-                      fontSize: '36px', 
-                      fontWeight: 'normal',
-                      fontFamily: "'Lobster', cursive", 
-                      color: '#3B2213', 
-                      textShadow: '-1px -1px 0 #E6D0A9, 1px -1px 0 #E6D0A9, -1px 1px 0 #E6D0A9, 1px 1px 0 #E6D0A9'
-                    }}>
-                      TallyBrew
-                    </h2>
+                    <img 
+        src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
+        alt="TallyBrew Logo" 
+        style={{ width: '100%', maxWidth: '200px', maxHeight: '150px', objectFit: 'contain', marginBottom: '20px' }} 
+      />
                     
                     <p style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>
                       {branchName || 'Main Branch'}
