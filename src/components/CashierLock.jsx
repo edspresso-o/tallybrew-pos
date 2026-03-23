@@ -9,7 +9,6 @@ export default function CashierLock({ onUnlock }) {
   const [isShaking, setIsShaking] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const [isLoading, setIsLoading] = useState(true); 
-
   const [isAddingCashier, setIsAddingCashier] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffPin, setNewStaffPin] = useState('');
@@ -22,12 +21,12 @@ export default function CashierLock({ onUnlock }) {
     const activeBranch = localStorage.getItem('tallybrew_branch');
     let query = supabase.from('profiles').select('*').order('username');
     
-    // --- THE FIX IS HERE ---
+    
     if (activeBranch === 'admin_remote') {
-      // ONLY fetch profiles that were specifically created on the admin_remote terminal (branch_id is null)
+      
       query = query.is('branch_id', null);
     } else if (activeBranch) {
-      // Fetch profiles created for this specific physical branch
+     
       query = query.eq('branch_id', activeBranch);
     }
 
@@ -148,9 +147,9 @@ export default function CashierLock({ onUnlock }) {
       `}</style>
       
       <div style={{ position: 'relative', width: '70px', height: '70px', marginBottom: '25px' }}>
-        {/* Spinning Outer Ring */}
+        {}
         <div style={{ boxSizing: 'border-box', display: 'block', position: 'absolute', width: '70px', height: '70px', border: '4px solid #E6D0A9', borderRadius: '50%', animation: 'spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite', borderTopColor: '#B56124' }}></div>
-        {/* Pulsing Coffee Cup Icon inside */}
+        {}
         <svg style={{ position: 'absolute', top: '21px', left: '21px', color: '#3B2213', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
           <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>

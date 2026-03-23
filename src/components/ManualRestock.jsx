@@ -23,7 +23,7 @@ export default function ManualRestock({ isOpen, onClose, menuItems, onRestock, p
   if (!isOpen) return null;
 
   return (
-    // FIX: Using flex centering and 20px padding to keep it perfectly in the middle
+    
     <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10005, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
       <div style={{ backgroundColor: '#fff', borderRadius: '24px', padding: '30px', width: '100%', maxWidth: '400px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', boxSizing: 'border-box' }}>
         
@@ -49,7 +49,7 @@ export default function ManualRestock({ isOpen, onClose, menuItems, onRestock, p
               <input type="number" value={qty} onChange={e => setQty(e.target.value)} required placeholder="e.g. 50" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '15px', fontWeight: '600', boxSizing: 'border-box', outline: 'none' }} />
             </div>
             <div>
-              {/* FIX: Forces long labels to truncate neatly with '...' so they don't break the row */}
+              {}
               <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#9ca3af', marginBottom: '8px', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Supplier / SKU</label>
               <input type="text" value={invoice} onChange={e => setInvoice(e.target.value)} placeholder="#INV-001" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '15px', fontWeight: '600', boxSizing: 'border-box', outline: 'none' }} />
             </div>

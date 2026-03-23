@@ -6,19 +6,14 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
   const [newPin, setNewPin] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const [isError, setIsError] = useState(false);
-  
   const [shiftLogs, setShiftLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
-
-  // --- Branch Management States ---
   const [branches, setBranches] = useState([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   const [newBranchLocation, setNewBranchLocation] = useState('');
   const [branchStatusMsg, setBranchStatusMsg] = useState('');
   const [isBranchError, setIsBranchError] = useState(false);
-
-  // --- Staff Management States ---
   const [staffList, setStaffList] = useState([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
@@ -27,11 +22,11 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
   const [newStaffBranch, setNewStaffBranch] = useState(''); 
   const [staffStatusMsg, setStaffStatusMsg] = useState('');
   const [isStaffError, setIsStaffError] = useState(false);
-
-  // --- Skim / Cash Drop States ---
   const [showSkimModal, setShowSkimModal] = useState(false);
   const [skimAmount, setSkimAmount] = useState('');
   const [isSkimming, setIsSkimming] = useState(false);
+  const [cashierToRemove, setCashierToRemove] = useState(null);
+  const [isRemovingCashier, setIsRemovingCashier] = useState(false);
 
   const isAdmin = activeCashier?.role === 'admin' || activeCashier?.role === 'manager';
 
@@ -189,6 +184,28 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
     }
   };
 
+  const handleRemoveCashier = async () => {
+    if (!cashierToRemove) return;
+    setIsRemovingCashier(true);
+    
+    try {
+      const { error } = await supabase.from('profiles').delete().eq('id', cashierToRemove.id);
+      if (error) throw error;
+
+      setStaffStatusMsg(`${cashierToRemove.username} has been removed from the roster.`);
+      setIsStaffError(false);
+      setCashierToRemove(null);
+      fetchStaff();
+      setTimeout(() => setStaffStatusMsg(''), 4000);
+
+    } catch (err) {
+      setStaffStatusMsg("System Error: Could not remove cashier.");
+      setIsStaffError(true);
+    } finally {
+      setIsRemovingCashier(false);
+    }
+  };
+
   const formatMoney = (amount) => `₱ ${Number(amount).toFixed(2)}`;
   
   const getBranchName = (bId) => {
@@ -198,14 +215,12 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
   };
 
   return (
-    // FIX: Added 'paddingTop: 60px' here to drop everything safely below the hamburger menu!
+    
     <div style={{ padding: '40px', paddingTop: '60px', backgroundColor: '#FDFBF7', minHeight: '100vh', width: '100%', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
       
-      {/* REDESIGNED: SKIM MODAL POPUP */}
       {showSkimModal && (
         <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           
-          {/* CSS to hide the ugly number input arrows just for this modal */}
           <style>{`
             .hide-arrows::-webkit-outer-spin-button,
             .hide-arrows::-webkit-inner-spin-button {
@@ -217,7 +232,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
             }
           `}</style>
 
-          <div style={{ width: '400px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s' }}>
+          <div style={{ width: '400px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', border: '3px solid #3B2213', animation: 'popIn 0.3s' }}>
             
             <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#B56124" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
@@ -253,6 +268,30 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
         </div>
       )}
 
+      {cashierToRemove && (
+        <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          
+          <div style={{ width: '400px', borderRadius: '32px', padding: '40px 35px', textAlign: 'center', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', border: '3px solid #3B2213', animation: 'popIn 0.3s' }}>
+            
+            <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #3B2213', boxShadow: '0 8px 16px rgba(59,34,19,0.1)' }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+
+            <h2 style={{ fontSize: '26px', fontWeight: '900', margin: '0 0 10px', color: '#3B2213', letterSpacing: '-0.5px' }}>Remove Cashier</h2>
+            
+            <p style={{ color: '#3B2213', fontSize: '14px', marginBottom: '30px', fontWeight: '600', opacity: 0.8, lineHeight: '1.4' }}>
+              Are you sure you want to completely remove <strong style={{color: '#B56124'}}>{cashierToRemove.username}</strong> from the system?
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => setCashierToRemove(null)} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#FDFBF7', color: '#3B2213', fontWeight: '900', fontSize: '15px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleRemoveCashier} disabled={isRemovingCashier} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', backgroundColor: '#3B2213', color: '#FDFBF7', fontWeight: '900', fontSize: '15px', cursor: isRemovingCashier ? 'not-allowed' : 'pointer', opacity: isRemovingCashier ? 0.6 : 1, boxShadow: '0 4px 12px rgba(59, 34, 19, 0.3)' }}>{isRemovingCashier ? 'Removing...' : 'Remove'}</button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       <div style={{ marginBottom: '30px', textAlign: 'left' }}>
         <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>
           Account Settings
@@ -262,7 +301,6 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
         </p>
       </div>
 
-      {/* TABS */}
       <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '30px', borderBottom: '2px solid #e5e7eb', marginBottom: '30px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <div 
           onClick={() => setActiveTab('shift')}
@@ -301,7 +339,6 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
         )}
       </div>
 
-      {/* TAB 1: SHIFT DETAILS */}
       {activeTab === 'shift' && (
         <div style={{ background: '#fff', borderRadius: '24px', padding: '35px', boxShadow: '0 10px 30px rgba(59, 34, 19, 0.05)', maxWidth: '500px', animation: 'fadeIn 0.3s ease-out', textAlign: 'left' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#3B2213', margin: '0 0 25px 0' }}>Current Shift Details</h2>
@@ -322,9 +359,8 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
               <span style={{ color: '#B56124', fontWeight: '900', fontSize: '14px' }}>{formatMoney(activeShift?.starting_cash || 0)}</span>
             </div>
 
-            {/* Display total skimmed cash if they have dropped any */}
             {Number(activeShift?.cash_drops || 0) > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', padding: '16px 20px', background: '#fef2f2', borderRadius: '16px', border: '1px dashed #fecaca' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', padding: '16px 20px', background: '#fef2f2', borderRadius: '12px', border: '1px dashed #fecaca' }}>
                 <span style={{ color: '#dc2626', fontWeight: '700', fontSize: '14px' }}>Total Cash Dropped:</span>
                 <span style={{ color: '#dc2626', fontWeight: '900', fontSize: '14px' }}>- {formatMoney(activeShift?.cash_drops)}</span>
               </div>
@@ -351,7 +387,6 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
         </div>
       )}
 
-      {/* TAB 2: UPDATE SECURITY PIN */}
       {activeTab === 'security' && (
         <div style={{ background: '#fff', borderRadius: '24px', padding: '35px', boxShadow: '0 10px 30px rgba(59, 34, 19, 0.05)', maxWidth: '500px', animation: 'fadeIn 0.3s ease-out', textAlign: 'left' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#3B2213', margin: '0 0 10px 0' }}>Update Personal PIN</h2>
@@ -393,7 +428,6 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
         </div>
       )}
 
-      {/* TAB 3: SHIFT HISTORY */}
       {activeTab === 'history' && isAdmin && (
         <div style={{ background: '#fff', borderRadius: '24px', padding: '35px', boxShadow: '0 10px 30px rgba(59, 34, 19, 0.05)', animation: 'fadeIn 0.3s ease-out', textAlign: 'left', overflow: 'hidden' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#3B2213', margin: '0 0 20px 0' }}>Shift Logs & Drawer Records</h2>
@@ -455,7 +489,6 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
         </div>
       )}
 
-      {/* TAB 4: MANAGE LOCATIONS */}
       {activeTab === 'locations' && isAdmin && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', animation: 'fadeIn 0.3s ease-out', textAlign: 'left' }}>
           
@@ -536,7 +569,6 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
         </div>
       )}
 
-      {/* TAB 5: MANAGE STAFF */}
       {activeTab === 'staff' && isAdmin && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', animation: 'fadeIn 0.3s ease-out', textAlign: 'left' }}>
           
@@ -549,16 +581,26 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {staffList.map(staff => (
-                  <div key={staff.id} style={{ display: 'flex', alignItems: 'center', padding: '20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
-                    <div style={{ width: '45px', height: '45px', borderRadius: '50%', background: staff.role === 'manager' || staff.role === 'admin' ? '#B56124' : '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginRight: '15px', fontWeight: '900', boxShadow: '0 4px 8px rgba(59,34,19,0.15)', flexShrink: 0 }}>
-                      {staff.username.charAt(0).toUpperCase()}
-                    </div>
-                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                      <div style={{ color: '#3B2213', fontWeight: '900', fontSize: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{staff.username}</div>
-                      <div style={{ color: '#B56124', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {staff.role} {branchId === 'admin_remote' ? ` • ${getBranchName(staff.branch_id)}` : ''}
+                  <div key={staff.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px', background: '#FDFBF7', borderRadius: '16px', border: '1px solid #E6D0A9' }}>
+                    <div style={{display: 'flex', alignItems: 'center'}}>
+                      <div style={{ width: '45px', height: '45px', borderRadius: '50%', background: staff.role === 'manager' || staff.role === 'admin' ? '#B56124' : '#3B2213', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', marginRight: '15px', fontWeight: '900', boxShadow: '0 4px 8px rgba(59,34,19,0.15)', flexShrink: 0 }}>
+                        {staff.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                        <div style={{ color: '#3B2213', fontWeight: '900', fontSize: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{staff.username}</div>
+                        <div style={{ color: '#B56124', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {staff.role} {branchId === 'admin_remote' ? ` • ${getBranchName(staff.branch_id)}` : ''}
+                        </div>
                       </div>
                     </div>
+                    {staff.username !== activeCashier?.username && (
+                      <button 
+                        onClick={() => setCashierToRemove(staff)}
+                        style={{ padding: '8px 12px', borderRadius: '10px', border: '2px solid #E6D0A9', background: '#FDFBF7', color: '#3B2213', fontWeight: '800', fontSize: '12px', cursor: 'pointer', opacity: isRemovingCashier ? 0.5 : 1 }}
+                      >
+                        REMOVE
+                      </button>
+                    )}
                   </div>
                 ))}
                 {staffList.length === 0 && (
@@ -640,7 +682,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
                   onChange={(e) => setNewStaffRole(e.target.value)}
                   style={{ width: '100%', padding: '16px 20px', boxSizing: 'border-box', background: '#FDFBF7', border: '2px solid #E6D0A9', borderRadius: '16px', fontSize: '15px', fontWeight: '800', color: '#3B2213', outline: 'none', cursor: 'pointer', appearance: 'none' }}
                 >
-                  <option value="cashier">Standard Cashier</option>
+                  <option value="cashier">Cashier</option>
                   <option value="manager">Store Manager</option>
                 </select>
               </div>
@@ -648,7 +690,7 @@ export default function Settings({ activeCashier, activeShift, onUpdateShift, on
               <button 
                 type="submit" 
                 disabled={!newStaffName.trim() || newStaffPin.length !== 6 || (branchId === 'admin_remote' && !newStaffBranch)}
-                style={{ padding: '18px', borderRadius: '16px', border: 'none', background: '#3B2213', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: (!newStaffName.trim() || newStaffPin.length !== 6 || (branchId === 'admin_remote' && !newStaffBranch)) ? 'not-allowed' : 'pointer', opacity: (!newStaffName.trim() || newStaffPin.length !== 6 || (branchId === 'admin_remote' && !newStaffBranch)) ? 0.6 : 1, transition: '0.2s', boxShadow: '0 8px 15px rgba(59, 34, 19, 0.2)', marginTop: '10px' }}
+                style={{ padding: '16px', borderRadius: '16px', border: 'none', background: '#3B2213', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: (!newStaffName.trim() || newStaffPin.length !== 6 || (branchId === 'admin_remote' && !newStaffBranch)) ? 'not-allowed' : 'pointer', opacity: (!newStaffName.trim() || newStaffPin.length !== 6 || (branchId === 'admin_remote' && !newStaffBranch)) ? 0.6 : 1, transition: '0.2s', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', marginTop: '10px' }}
               >
                 Create Cashier Account
               </button>

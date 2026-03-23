@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
+export default function Auth({ isRecovering, onRecoveryComplete }) {
+  const [isLogin, setIsLogin] = useState(!isRecovering);
+  const [isResetting, setIsResetting] = useState(false); 
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(isRecovering || false);
   const [loading, setLoading] = useState(false);
   const [awaitingOtp, setAwaitingOtp] = useState(false); 
   
-  // --- Branch States ---
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(localStorage.getItem('tallybrew_branch') || '');
 
-  // Form States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [username, setUsername] = useState('');
   const [role, setRole] = useState('cashier'); 
   const [terminalPin, setTerminalPin] = useState(''); 
@@ -21,7 +22,6 @@ export default function Auth() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Fetch Branches on Load
   useEffect(() => {
     const fetchBranches = async () => {
       const { data, error } = await supabase.from('branches').select('*');
@@ -30,13 +30,68 @@ export default function Auth() {
     fetchBranches();
   }, []);
 
-  // Save Branch to Tablet Memory
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsUpdatingPassword(true);
+        setIsResetting(false);
+        setIsLogin(false);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   const handleBranchChange = (e) => {
     const branchId = e.target.value;
     setSelectedBranch(branchId);
   };
 
-  // --- STEP 1: LOGIN OR SIGN UP ---
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccessMsg('');
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin, 
+      });
+      if (resetError) throw resetError;
+      setSuccessMsg("Reset link sent! Please check your email inbox.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccessMsg('');
+
+    try {
+      if (newPassword.length < 6) throw new Error("Password must be at least 6 characters.");
+      
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+      
+      setSuccessMsg("Password updated successfully! Logging you in...");
+      setNewPassword('');
+      
+      setTimeout(() => {
+        if (onRecoveryComplete) onRecoveryComplete();
+        else window.location.reload();
+      }, 1500);
+
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -44,21 +99,17 @@ export default function Auth() {
     setSuccessMsg('');
 
     try {
-      if (!selectedBranch) throw new Error("Please select a Store Location first.");
+      if (!selectedBranch && !isRecovering) throw new Error("Please select a Store Location first.");
 
       if (isLogin) {
-        // --- STRICT LOGIN LOGIC ---
         const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
         
-        // 1. Check the hidden metadata we saved during signup
         const userBranch = data.user?.user_metadata?.branch_id;
 
-        // 2. Strict Bouncer: If the email doesn't match the selected dropdown, kick them out!
         if (userBranch && userBranch !== selectedBranch) {
-          await supabase.auth.signOut(); // Log them back out immediately
+          await supabase.auth.signOut(); 
           
-          // Figure out the name of the branch they actually belong to for the error message
           let intendedLocation = "another location";
           if (userBranch === 'admin_remote') {
             intendedLocation = "💻 Remote Admin (Dashboard Only)";
@@ -70,12 +121,10 @@ export default function Auth() {
           throw new Error(`Access Denied: This email is strictly locked to ${intendedLocation}.`);
         }
 
-        // If they pass the check, allow the login
         localStorage.setItem('tallybrew_branch', selectedBranch);
-        window.location.reload(); // Refresh to load the app
+        window.location.reload(); 
 
       } else {
-        // --- STRICT SIGN UP LOGIC ---
         if (!username) throw new Error("Please enter a display name.");
         if (terminalPin.length !== 6) throw new Error("Your Terminal PIN must be exactly 6 digits.");
         
@@ -84,7 +133,6 @@ export default function Auth() {
           password,
           options: {
             data: {
-              // We permanently brand this email to the selected branch
               branch_id: selectedBranch 
             }
           }
@@ -102,7 +150,6 @@ export default function Auth() {
     }
   };
 
-  // --- STEP 2: VERIFY EMAIL OTP ---
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -120,7 +167,6 @@ export default function Auth() {
       if (verifyError) throw verifyError;
 
       if (data?.user) {
-        // Attach the branch_id to the user profile
         const { error: profileError } = await supabase.from('profiles').insert([
           { username: username, role: role, pin: terminalPin, branch_id: selectedBranch }
         ]);
@@ -139,25 +185,41 @@ export default function Auth() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif", padding: '20px', boxSizing: 'border-box' }}>
       
      <img 
         src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
         alt="TallyBrew Logo" 
-        style={{ maxWidth: '300px', width: '100%', height: 'auto', marginBottom: '30px' }} 
+        style={{ width: '100%', maxWidth: '300px', maxHeight: '150px', objectFit: 'contain', marginBottom: '20px' }} 
       />
 
-      <div style={{ background: '#E6D0A9', borderRadius: '24px', padding: '40px', width: '100%', maxWidth: '380px', boxShadow: '0 15px 35px rgba(0,0,0,0.06)', animation: 'fadeIn 0.3s ease-out' }}>
+      <div style={{ background: '#E6D0A9', borderRadius: '24px', padding: '30px', width: '100%', maxWidth: isLogin ? '360px' : '460px', boxShadow: '0 15px 35px rgba(0,0,0,0.06)', animation: 'fadeIn 0.3s ease-out', boxSizing: 'border-box', transition: 'max-width 0.3s ease' }}>
         
-        <h2 style={{ color: '#B56124', fontSize: '28px', fontWeight: '800', margin: '0 0 25px 0', letterSpacing: '-0.5px' }}>
-          {awaitingOtp ? 'Verify Email' : (isLogin ? 'Welcome Back' : 'Sign Up')}
+        <h2 style={{ color: '#B56124', fontSize: '26px', fontWeight: '800', margin: '0 0 20px 0', letterSpacing: '-0.5px' }}>
+          {isUpdatingPassword ? 'New Password' : isResetting ? 'Reset Password' : (awaitingOtp ? 'Verify Email' : (isLogin ? 'Welcome Back' : 'Sign Up'))}
         </h2>
 
-        {error && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '12px', marginBottom: '20px', fontSize: '13px', fontWeight: '600', border: '1px solid #fecaca' }}>{error}</div>}
-        {successMsg && <div style={{ background: '#ecfdf5', color: '#059669', padding: '12px', borderRadius: '12px', marginBottom: '20px', fontSize: '13px', fontWeight: '600', border: '1px solid #a7f3d0' }}>{successMsg}</div>}
+        {error && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '12px', marginBottom: '15px', fontSize: '13px', fontWeight: '600', border: '1px solid #fecaca' }}>{error}</div>}
+        {successMsg && <div style={{ background: '#ecfdf5', color: '#059669', padding: '12px', borderRadius: '12px', marginBottom: '15px', fontSize: '13px', fontWeight: '600', border: '1px solid #a7f3d0' }}>{successMsg}</div>}
 
-        {/* --- UI: OTP VERIFICATION SCREEN --- */}
-        {awaitingOtp ? (
+        {isUpdatingPassword ? (
+          <form onSubmit={handleUpdatePassword} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+             <p style={{ color: '#3B2213', fontSize: '14px', fontWeight: '600', marginBottom: '5px', opacity: 0.8 }}>Enter your new secure password below.</p>
+             <input type="password" placeholder="New Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={inputStyle} required autoFocus />
+             <button type="submit" disabled={loading || newPassword.length < 6} style={btnStyle(loading || newPassword.length < 6)}>
+               {loading ? 'Saving...' : 'Save New Password'}
+             </button>
+          </form>
+
+        ) : isResetting ? (
+          <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+             <p style={{ color: '#3B2213', fontSize: '14px', fontWeight: '600', marginBottom: '5px', opacity: 0.8 }}>Enter your email address to receive a reset link.</p>
+             <input type="email" placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} required />
+             <button type="submit" disabled={loading} style={btnStyle(loading)}>{loading ? 'Sending...' : 'Send Reset Link'}</button>
+             <p onClick={() => { setIsResetting(false); setError(''); setSuccessMsg(''); }} style={{ textAlign: 'center', marginTop: '10px', color: '#B56124', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>← Back to Login</p>
+          </form>
+
+        ) : awaitingOtp ? (
           <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <p style={{ color: '#3B2213', fontSize: '14px', fontWeight: '600', margin: '0 0 10px 0', opacity: 0.8 }}>
               Enter the 6-digit code sent to <strong>{email}</strong>
@@ -185,8 +247,7 @@ export default function Auth() {
 
         ) : (
           
-          /* --- UI: LOGIN / SIGN UP SCREEN --- */
-          <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
             <div style={{ position: 'relative' }}>
               <select 
@@ -197,7 +258,6 @@ export default function Auth() {
               >
                 <option value="" disabled>Select Store Location</option>
                 <option value="admin_remote">Remote Admin</option>
-
                 {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}
@@ -206,34 +266,49 @@ export default function Auth() {
               </select>
             </div>
 
-            {!isLogin && (
+            {!isLogin ? (
               <>
-                <input type="text" placeholder="Display Name" value={username} onChange={(e) => setUsername(e.target.value)} style={inputStyle} required />
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input type="text" placeholder="Display Name" value={username} onChange={(e) => setUsername(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }} required />
+                  <select value={role} onChange={(e) => setRole(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0, appearance: 'none', cursor: 'pointer' }}>
+                    <option value="cashier">Cashier</option>
+                    <option value="manager">Manager (Admin)</option>
+                  </select>
+                </div>
                 
-                <select value={role} onChange={(e) => setRole(e.target.value)} style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}>
-                  <option value="cashier">Cashier</option>
-                  <option value="manager">Manager (Admin)</option>
-                </select>
+                <input type="email" placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} required />
 
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="password" 
-                    placeholder="Create 6-Digit PIN" 
-                    value={terminalPin} 
-                    maxLength={6} 
-                    onChange={(e) => setTerminalPin(e.target.value.replace(/[^0-9]/g, ''))} 
-                    style={{...inputStyle, letterSpacing: '2px', width: '100%', boxSizing: 'border-box'}} 
-                    required 
-                  />
-                  <span style={{ position: 'absolute', right: '15px', top: '16px', fontSize: '11px', color: '#B56124', fontWeight: '800', textTransform: 'uppercase' }}>
-                    POS Lock
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }} required />
+
+                  <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                    <input 
+                      type="password" 
+                      placeholder="6-Digit PIN" 
+                      value={terminalPin} 
+                      maxLength={6} 
+                      onChange={(e) => setTerminalPin(e.target.value.replace(/[^0-9]/g, ''))} 
+                      style={{...inputStyle, letterSpacing: '2px', width: '100%', boxSizing: 'border-box', paddingRight: '70px'}} 
+                      required 
+                    />
+                    <span style={{ position: 'absolute', right: '12px', top: '15px', fontSize: '10px', color: '#B56124', fontWeight: '900', textTransform: 'uppercase' }}>
+                      POS Lock
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <input type="email" placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} required />
+                <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} required />
+
+                <div style={{ width: '100%', textAlign: 'right', marginTop: '-5px' }}>
+                  <span onClick={() => { setIsResetting(true); setError(''); setSuccessMsg(''); }} style={{ fontSize: '12px', color: '#B56124', fontWeight: '800', cursor: 'pointer' }}>
+                    Forgot Password?
                   </span>
                 </div>
               </>
             )}
-
-            <input type="email" placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} required />
-            <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} required />
 
             <button type="submit" disabled={loading} style={btnStyle(loading)}>
               {loading ? 'Processing...' : (isLogin ? 'Log In' : 'Create Account')}
@@ -241,9 +316,8 @@ export default function Auth() {
           </form>
         )}
 
-        {/* --- TOGGLE LOGIN / SIGNUP --- */}
-        {!awaitingOtp && (
-          <p onClick={() => { setIsLogin(!isLogin); setError(''); }} style={{ textAlign: 'center', margin: '25px 0 0 0', color: '#3B2213', fontSize: '13px', fontWeight: '700', cursor: 'pointer', transition: '0.2s' }} onMouseOver={(e) => e.target.style.opacity = 0.7} onMouseOut={(e) => e.target.style.opacity = 1}>
+        {!awaitingOtp && !isResetting && !isUpdatingPassword && (
+          <p onClick={() => { setIsLogin(!isLogin); setError(''); }} style={{ textAlign: 'center', margin: '20px 0 0 0', color: '#3B2213', fontSize: '13px', fontWeight: '700', cursor: 'pointer', transition: '0.2s' }} onMouseOver={(e) => e.target.style.opacity = 0.7} onMouseOut={(e) => e.target.style.opacity = 1}>
             {isLogin ? "Don't have an account? Sign Up" : "Already setup? Log In"}
           </p>
         )}
@@ -253,6 +327,5 @@ export default function Auth() {
   );
 }
 
-// Reusable Styles
-const inputStyle = { background: '#F5E8D2', border: 'none', borderRadius: '12px', padding: '16px 20px', fontSize: '15px', fontWeight: '600', color: '#3B2213', outline: 'none' };
-const btnStyle = (disabled) => ({ background: '#3B2213', color: '#fff', border: 'none', padding: '16px', borderRadius: '12px', fontSize: '16px', fontWeight: '800', cursor: disabled ? 'not-allowed' : 'pointer', marginTop: '10px', transition: '0.2s', opacity: disabled ? 0.7 : 1, width: '100%' });
+const inputStyle = { background: '#F5E8D2', border: 'none', borderRadius: '12px', padding: '14px 18px', fontSize: '14px', fontWeight: '600', color: '#3B2213', outline: 'none', width: '100%', boxSizing: 'border-box' };
+const btnStyle = (disabled) => ({ background: '#3B2213', color: '#fff', border: 'none', padding: '16px', borderRadius: '12px', fontSize: '16px', fontWeight: '800', cursor: disabled ? 'not-allowed' : 'pointer', marginTop: '5px', transition: '0.2s', opacity: disabled ? 0.7 : 1, width: '100%', boxSizing: 'border-box' });

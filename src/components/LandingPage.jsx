@@ -2,10 +2,10 @@ import React, { useEffect } from 'react';
 
 export default function LandingPage({ onLoginClick }) {
  useEffect(() => {
-    // 1. THE TRICK: Secretly download images into the device memory
+   
     const imagesToPreload = [
       `${import.meta.env.BASE_URL}images/TallyBrewLogo.png`,
-      // You can add more image paths here if you have specific big pictures!
+     
     ];
 
     imagesToPreload.forEach((imageSrc) => {
@@ -13,7 +13,7 @@ export default function LandingPage({ onLoginClick }) {
       img.src = imageSrc;
     });
 
-    // 2. The original 5-second transition timer
+   
     const timer = setTimeout(() => {
       onLoginClick();
     }, 5000);

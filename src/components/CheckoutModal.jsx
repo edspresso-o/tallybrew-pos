@@ -8,20 +8,18 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [showReceipt, setShowReceipt] = useState(false);
   
-  // GCash specific state
+ 
   const [gcashReference, setGcashReference] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState(null);
 
-  // Store the actual text name of the branch
   const [branchName, setBranchName] = useState('');
 
-  // Load the saved QR code and Branch Name when the modal opens
+  
   useEffect(() => {
     if (isOpen) {
       const savedQr = localStorage.getItem('tallybrew_gcash_qr');
       if (savedQr) setQrCodeUrl(savedQr);
 
-      // Fetch the branch name for the receipt header
       const fetchBranchName = async () => {
         const activeBranchId = localStorage.getItem('tallybrew_branch');
         if (activeBranchId && activeBranchId !== 'admin_remote') {
@@ -37,20 +35,19 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
 
   const totalAmount = Number(total);
   const change = parseFloat(receivedAmount) - totalAmount;
-  
-  // Must have enough cash OR a GCash reference number to proceed
+
   const isPaid = paymentMethod === 'GCash' 
     ? gcashReference.length >= 4 
     : (parseFloat(receivedAmount) >= totalAmount);
 
-  // Handle uploading and saving the QR code
+  
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setQrCodeUrl(reader.result);
-        localStorage.setItem('tallybrew_gcash_qr', reader.result); // Saves it forever!
+        localStorage.setItem('tallybrew_gcash_qr', reader.result); 
       };
       reader.readAsDataURL(file);
     }
@@ -68,7 +65,7 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
   const handleFinishOrder = () => {
     const finalReceived = paymentMethod === 'GCash' ? totalAmount.toString() : receivedAmount;
     
-    // Attach the Reference Number to the customer's name for the database
+  
     const finalCustomerName = paymentMethod === 'GCash' 
       ? `${customerName || 'Guest'} (Ref: ${gcashReference})` 
       : customerName;
@@ -114,7 +111,7 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
   return (
     <div className="popup-overlay no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
       
-      {/* CSS to hide number input arrows and add a pop animation */}
+      {}
       <style>{`
         .hide-arrows::-webkit-outer-spin-button,
         .hide-arrows::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -198,7 +195,7 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
                 />
               </div>
 
-              {/* QUICK CASH BUTTONS */}
+              {}
               <div style={{ display: 'flex', gap: '6px', marginBottom: '15px' }}>
                 <button className="quick-cash-btn" onClick={() => setReceivedAmount(totalAmount)}>Exact</button>
                 <button className="quick-cash-btn" onClick={() => setReceivedAmount(100)}>100</button>
@@ -261,7 +258,7 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
         
       ) : (
         
-        /* EXACT ORIGINAL RECEIPT SCREEN */
+      
         <div style={{ backgroundColor: '#fff', padding: '0', borderRadius: '12px', width: '380px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)', animation: 'popIn 0.3s', overflow: 'hidden' }}>
           <div id="receipt-core" style={{ padding: '40px 30px', borderBottom: '2px dashed #e5e7eb', background: '#fff' }}>
             <div style={{ textAlign: 'center', marginBottom: '20px' }}>

@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 export default function Dashboard({ sales = [], menuItems = [] }) {
   const [timeFilter, setTimeFilter] = useState('Today');
   
-  // --- Multi-Branch States ---
+  
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(localStorage.getItem('tallybrew_branch') || 'All');
   const [activeSales, setActiveSales] = useState(sales);
@@ -111,7 +111,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
   const maxChartValue = Math.max(...weeklyChartData.map(d => d.total), 1);
 
-  // --- THE GOD REPORT: MASTER EXECUTIVE EXPORT ---
+
   const handleExport = async () => {
     setIsExporting(true);
 
@@ -206,7 +206,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
       let csv = '\uFEFF'; 
       
-      csv += "TALLYBREW POS - MASTER EXECUTIVE REPORT,,,,,\n";
+      csv += "TALLYBREW_POS_ANALYTICS_MASTER_EXECUTIVE_REPORT,,,,,\n";
       csv += `Generated On:,${escapeCSV(new Date().toLocaleString())},,,,\n`;
       csv += `Location Filter:,${escapeCSV(branchName.toUpperCase())},,,,\n`;
       csv += `Time Filter:,${escapeCSV(timeFilter.toUpperCase())},,,,\n`;
@@ -344,8 +344,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
   };
 
   return (
-    // RESPONSIVE FIX 1: Use CSS variables and media query classes from App.css for padding, or inline logic if preferred. 
-    // Kept inline here to ensure it applies immediately without CSS file changes.
+    
     <div className="dashboard-container" style={{ width: '100%', boxSizing: 'border-box', padding: 'clamp(15px, 4vw, 40px)', position: 'relative' }}>
       
       {(isLoading || isExporting) && (
@@ -354,7 +353,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         </div>
       )}
 
-      {/* RESPONSIVE FIX 2: Header section wraps neatly on mobile */}
+      {}
       <div className="dashboard-header" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: 'clamp(20px, 4vw, 35px)' }}>
         <h1 style={{ margin: 0, fontSize: 'clamp(20px, 4vw, 25px)', fontWeight: '900', color: '#111', letterSpacing: '-0.5px' }}>Store Performance</h1>
         
@@ -389,7 +388,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         </div>
       </div>
 
-      {/* RESPONSIVE FIX 3: Grid automatically adjusts from 1 column (mobile) to 4 columns (desktop) */}
+      {}
       <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: 'clamp(25px, 5vw, 40px)' }}>
         
         <div className="kpi-card" style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', padding: '20px', borderRadius: '16px', background: '#fff', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #f3f4f6' }}>
@@ -431,7 +430,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         </div>
       </div>
 
-      {/* RESPONSIVE FIX 4: Chart container allows horizontal scrolling on tiny screens instead of breaking layout */}
+      {}
       <div className="chart-section" style={{ width: '100%', paddingBottom: '15px' }}>
         <h2 className="chart-title" style={{ marginBottom: '20px', fontSize: 'clamp(18px, 3vw, 22px)', fontWeight: '900', color: '#111', textAlign: 'left' }}>Sales Trend (Last 7 Days)</h2>
         

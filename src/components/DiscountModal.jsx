@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default function DiscountModal({ onClose, applyDiscount, currentDiscount }) {
-  // Pre-defined standard POS discounts
+
   const discountOptions = [
     { label: 'No Discount', rate: 0 },
     { label: 'Senior Citizen', rate: 0.20 }, // 20%
@@ -52,7 +52,7 @@ export default function DiscountModal({ onClose, applyDiscount, currentDiscount 
                   {opt.rate > 0 && <span style={{ opacity: 0.6, fontSize: '14px', marginLeft: '8px' }}>({opt.rate * 100}%)</span>}
                 </span>
                 
-                {/* Show a checkmark if selected */}
+                {}
                 {isActive && (
                   <span style={{ backgroundColor: '#b85e2b', color: '#fff', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px' }}>
                     ✓

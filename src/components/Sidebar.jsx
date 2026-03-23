@@ -14,11 +14,11 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
   };
 
   const attemptSignOut = () => {
-    // If a shift is open AND the user is just a regular cashier, block them
+    
     if (activeShift && activeCashier?.role !== 'manager' && activeCashier?.role !== 'admin') {
       setShowOverrideModal(true);
     } else {
-      // Managers, Admins, or cashiers with NO active shift can sign out normally
+     
       handleSignOut();
     }
   };
@@ -28,7 +28,7 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
     { name: 'Menu', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg> },
     { name: 'Kitchen', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg> },
     
-    // --- NEW: TRANSACTIONS TAB ADDED HERE ---
+ 
     { name: 'Transactions', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> },
     
     { name: 'Inventory', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg> },
@@ -134,7 +134,7 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
         }
       `}</style>
 
-      {/* SHIFT STILL ACTIVE WARNING POPUP */}
+      {}
       {showOverrideModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10005, backgroundColor: 'rgba(59, 34, 19, 0.7)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ width: '380px', borderRadius: '32px', padding: '35px', backgroundColor: '#E6D0A9', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'fadeIn 0.3s ease-out', textAlign: 'center' }}>
@@ -161,7 +161,7 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
         </div>
       )}
 
-      {/* SIDEBAR CONTENT */}
+      {}
       <div className={`sidebar-wrapper ${isMobileNavOpen ? 'mobile-open' : ''}`}>
         
         <button className="mobile-close-btn" onClick={() => setIsMobileNavOpen && setIsMobileNavOpen(false)}>
@@ -184,7 +184,7 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
                 key={item.name}
                 onClick={() => {
                   setCurrentView(item.name);
-                  // Close sidebar automatically on mobile after navigating
+             
                   if (setIsMobileNavOpen) setIsMobileNavOpen(false); 
                 }}
                 onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
@@ -200,7 +200,7 @@ export default function Sidebar({ currentView, setCurrentView, activeCashier, ac
           })}
         </nav>
 
-        {/* LIFTED BOTTOM SECTION: Increased bottom padding to 40px */}
+        {}
         <div style={{ padding: '25px 25px 40px 25px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '15px', marginBottom: '25px', paddingLeft: '5px' }}>
             <div style={{ width: '45px', height: '45px', backgroundColor: '#C0662A', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '800' }}>

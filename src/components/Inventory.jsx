@@ -2,11 +2,11 @@ import React from 'react';
 
 export default function Inventory({ ingredients, onRestockClick, onAddIngredientClick, onWastageClick }) {
   return (
-    // FIX 1: Added paddingTop: '60px' to safely clear the hamburger menu on mobile
+    
     <div style={{ padding: '20px', paddingTop: '60px', flex: 1, width: '100%', overflowY: 'auto', backgroundColor: '#fff', boxSizing: 'border-box' }}>
       
-      {/* HEADER & ACTION BUTTONS */}
-      {/* FIX 2: Added flexWrap: 'wrap' so the buttons stack neatly if the screen is narrow */}
+      {}
+      {}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: '30px' }}>
         <div>
           <h1 style={{ fontSize: '27px', fontWeight: '800', color: '#111', margin: 0, letterSpacing: '-0.5px' }}>
@@ -50,10 +50,10 @@ export default function Inventory({ ingredients, onRestockClick, onAddIngredient
         </div>
       </div>
 
-      {/* THE TABLE DESIGN */}
+      {}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #f3f4f6', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', padding: '10px 0' }}>
         
-        {/* FIX 3: Added overflowX: 'auto' so the table can be swiped left/right on mobile without breaking the page width */}
+        {}
         <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 20px' }}>
           <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'left' }}>
             

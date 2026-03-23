@@ -1,11 +1,11 @@
 import React from 'react';
 
 export default function Transactions({ sales, onVoidSale, activeCashier }) {
-  // Sort sales from newest to oldest
+ 
   const sortedSales = [...sales].reverse();
 
   return (
-    // FIX: Added paddingTop: '50px' to push the entire page down below the hamburger menu!
+    
     <div className="transactions-page" style={{ padding: '20px', paddingTop: '50px', width: '100%', boxSizing: 'border-box' }}>
       
       <div className="transactions-header" style={{ marginBottom: '25px' }}>
@@ -24,7 +24,7 @@ export default function Transactions({ sales, onVoidSale, activeCashier }) {
               borderRadius: '16px', 
               padding: '16px',
               display: 'flex',
-              flexWrap: 'wrap', // Allows the void button to drop down on small screens
+              flexWrap: 'wrap', 
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '15px',
@@ -33,7 +33,7 @@ export default function Transactions({ sales, onVoidSale, activeCashier }) {
               boxSizing: 'border-box'
             }}>
               
-              {/* Left Side: Order Details */}
+              {}
               <div style={{ flex: '1 1 220px', minWidth: 0 }}> 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
                   <span style={{ backgroundColor: '#fef08a', color: '#d97706', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '900', letterSpacing: '0.5px' }}>
@@ -48,7 +48,7 @@ export default function Transactions({ sales, onVoidSale, activeCashier }) {
                 </div>
               </div>
 
-              {/* Right Side: Amount & Action Button */}
+              {}
               <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap', flex: '0 0 auto' }}>
                 <div style={{ fontSize: '22px', fontWeight: '900', color: '#3B2213' }}>
                   ₱{Number(sale.total_amount).toFixed(2)}

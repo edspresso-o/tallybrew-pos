@@ -26,24 +26,23 @@ export default function KitchenDisplay() {
     setIsLoading(false);
   };
 
-  // Poll for new orders every 5 seconds
+ 
   useEffect(() => {
     fetchOrders();
     const interval = setInterval(fetchOrders, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // Update the live timers every 1 second
+
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   const markCompleted = async (id) => {
-    // Instantly remove from screen for a snappy feel
+    
     setOrders(prev => prev.filter(o => o.id !== id));
     
-    // Update the database in the background
     await supabase.from('sales').update({ kitchen_status: 'completed' }).eq('id', id);
   };
 
@@ -67,7 +66,7 @@ export default function KitchenDisplay() {
   }
 
   return (
-    // FIX: Added paddingTop: '60px' to dodge the hamburger menu
+    
     <div style={{ padding: '20px', paddingTop: '60px', backgroundColor: '#FDFBF7', minHeight: '100%', width: '100%', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
       
       <style>{`
@@ -82,7 +81,7 @@ export default function KitchenDisplay() {
         .order-card { transition: all 0.3s ease; }
       `}</style>
 
-      {/* FIX: Added flexWrap: 'wrap' and gap: '15px' so the clock stacks on mobile */}
+      {}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: '30px', textAlign: 'left' }}>
         <div>
           <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#3B2213', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>
@@ -110,39 +109,39 @@ export default function KitchenDisplay() {
           {orders.map((order) => {
             const elapsed = getElapsedSeconds(order.created_at);
             
-            // --- COLOR CODING LOGIC ---
+            
             let statusConfig = {
               bg: '#fff',
               border: '#E6D0A9',
-              timerColor: '#10b981', // Green
+              timerColor: '#10b981', 
               timerBg: '#ecfdf5',
               animation: 'none'
             };
 
-            if (elapsed >= 300) { // Over 5 minutes
+            if (elapsed >= 300) { 
               statusConfig = {
                 bg: '#fef2f2',
                 border: '#ef4444',
-                timerColor: '#dc2626', // Red
+                timerColor: '#dc2626', 
                 timerBg: '#fee2e2',
                 animation: 'pulseUrgent 2s infinite'
               };
-            } else if (elapsed >= 120) { // Over 2 minutes
+            } else if (elapsed >= 120) { 
               statusConfig = {
                 bg: '#fffbeb',
                 border: '#f59e0b',
-                timerColor: '#d97706', // Orange
+                timerColor: '#d97706', 
                 timerBg: '#fef3c7',
                 animation: 'none'
               };
             }
 
-            // Parse the items_summary (e.g., "[DINE-IN] John - 2x Latte, 1x Cookie")
+           
             const summaryParts = order.items_summary ? order.items_summary.split(' - ') : ['Unknown', 'No items'];
-            const headerInfo = summaryParts[0]; // "[DINE-IN] John"
-            const itemsList = summaryParts.length > 1 ? summaryParts.slice(1).join(' - ') : ''; // "2x Latte, 1x Cookie"
+            const headerInfo = summaryParts[0]; 
+            const itemsList = summaryParts.length > 1 ? summaryParts.slice(1).join(' - ') : ''; 
             
-            // Split items by comma for cleaner rendering
+           
             const individualItems = itemsList.split(', ');
 
             return (
@@ -178,7 +177,7 @@ export default function KitchenDisplay() {
 
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '10px', marginBottom: '25px', width: '100%' }}>
                   {individualItems.map((itemStr, idx) => {
-                    // Extract qty to make it bold (e.g., "2x" from "2x Latte")
+                    
                     const match = itemStr.match(/^(\d+x)\s+(.*)/);
                     if (match) {
                       return (

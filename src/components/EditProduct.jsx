@@ -6,7 +6,7 @@ export default function EditProduct({ isOpen, onClose, product, onUpdate }) {
     price: '',
     category: 'Hot Coffee',
     recipe: '',
-    stock_qty: 0, // Added stock state
+    stock_qty: 0, 
   });
 
   useEffect(() => {
@@ -16,7 +16,7 @@ export default function EditProduct({ isOpen, onClose, product, onUpdate }) {
         price: product.price || '',
         category: product.category || 'Hot Coffee',
         recipe: product.recipe || '',
-        stock_qty: product.stock_qty || 0, // Initialize with current stock
+        stock_qty: product.stock_qty || 0, 
       });
     }
   }, [product]);
@@ -53,7 +53,7 @@ export default function EditProduct({ isOpen, onClose, product, onUpdate }) {
               <input type="number" name="price" className="pill" value={formData.price} onChange={handleChange} required />
             </div>
             <div style={{ flex: 1 }}>
-              <label>STOCK QUANTITY</label> {/* NEW STOCK INPUT */}
+              <label>STOCK QUANTITY</label> {}
               <input 
                 type="number" 
                 name="stock_qty" 

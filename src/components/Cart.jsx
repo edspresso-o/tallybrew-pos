@@ -6,10 +6,10 @@ export default function Cart({ cart, updateQty, total, handleCheckout, discount,
   const totalAmount = safeTotal - discountAmount;
 
   return (
-    // FIX: flexGrow: 1 forces the entire cart to stretch and fill all available vertical space
+  
     <div className="cart-panel" style={{ flexGrow: 1, width: '100%', minHeight: '100%', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       
-      {/* HEADER */}
+      {}
       <div className="cart-header" style={{ flexShrink: 0, padding: '20px', borderBottom: '2px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '10px' }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b85e2b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="9" cy="21" r="1"></circle>
@@ -19,8 +19,8 @@ export default function Cart({ cart, updateQty, total, handleCheckout, discount,
         <h2 style={{ fontSize: '20px', fontWeight: '900', margin: 0, color: '#111', letterSpacing: '-0.5px' }}>Current Order</h2>
       </div>
       
-      {/* CART ITEMS LIST (Scrollable Middle) */}
-      {/* FIX: flexGrow: 1 here forces this section to stretch, pushing the summary to the absolute bottom! */}
+      {}
+      {}
       <div className="cart-items" style={{ flexGrow: 1, overflowY: 'auto', padding: '15px' }}>
         {cart.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#9ca3af', marginTop: '40px', fontWeight: '600', fontSize: '15px' }}>Cart is empty</div>
@@ -50,7 +50,7 @@ export default function Cart({ cart, updateQty, total, handleCheckout, discount,
         )}
       </div>
 
-      {/* SUMMARY & CHECKOUT SECTION (Sticky Bottom) */}
+      {}
       <div className="cart-summary" style={{ flexShrink: 0, padding: '20px', paddingBottom: 'max(20px, env(safe-area-inset-bottom))', borderTop: '2px solid #e5e7eb', backgroundColor: '#fff', boxShadow: '0 -4px 10px rgba(0,0,0,0.02)' }}>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#6b7280', fontSize: '14px', fontWeight: '600', padding: '0 4px' }}>

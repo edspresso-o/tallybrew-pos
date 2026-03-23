@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 export default function AddProduct({ onClose, addProduct, ingredients, categories }) {
-  // Default to the first category in the list (e.g., 'Hot Coffee')
+  
   const [formData, setFormData] = useState({ 
     name: '', 
     price: '', 

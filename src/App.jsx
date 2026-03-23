@@ -18,12 +18,10 @@ import Auth from './components/Auth.jsx';
 import CashierLock from './components/CashierLock.jsx'; 
 import LandingPage from './components/LandingPage.jsx';
 import Transactions from './components/Transactions.jsx'; 
-
 import GlobalAlert from './components/modals/GlobalAlert.jsx';
 import ManagerAuthModal from './components/modals/ManagerAuthModal.jsx';
 import ModifierModal from './components/modals/ModifierModal.jsx';
 import { StartShiftModal, EndShiftModal, ShiftReportModal } from './components/modals/ShiftModals.jsx';
-
 import { useCart } from './hooks/useCart.js';
 import { useShift } from './hooks/useShift.js';
 
@@ -79,8 +77,8 @@ function App() {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false); 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingSalesCount, setPendingSalesCount] = useState(0);
+  const [isRecovering, setIsRecovering] = useState(window.location.hash.includes('type=recovery'));
 
-  // THE FIX: Added the categories array back so the Menu doesn't crash!
   const categories = ["All", "Hot Coffee", "Iced Coffee", "Non-Coffee", "Frappe", "Snacks", "Rice Meals", "Add-on", "Milk"];
 
   const effectiveBranch = activeLocation === 'admin_remote' 
@@ -142,7 +140,24 @@ function App() {
   };
 
   useEffect(() => { const handleOnline = () => { setIsOnline(true); syncPendingQueue(); }; const handleOffline = () => setIsOnline(false); window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline); const pending = getOfflineQueue(); setPendingSalesCount(pending.length); return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); }; }, []);
-  useEffect(() => { supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); if (!session) { setActiveCashier(null); setActiveShift(null); } }); const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); if (!session) { setActiveCashier(null); setActiveShift(null); } }); return () => subscription.unsubscribe(); }, []);
+  
+  // THE FIX: Listen for PASSWORD_RECOVERY and set isRecovering to true!
+  useEffect(() => { 
+    supabase.auth.getSession().then(({ data: { session } }) => { 
+      setSession(session); 
+      if (!session) { setActiveCashier(null); setActiveShift(null); } 
+    }); 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => { 
+      // If the email link is clicked, this triggers instantly
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovering(true);
+      }
+      setSession(session); 
+      if (!session) { setActiveCashier(null); setActiveShift(null); } 
+    }); 
+    return () => subscription.unsubscribe(); 
+  }, []);
+
   useEffect(() => { if (session && isOnline) fetchAllData(); }, [session, isOnline, adminViewBranch]);
   
   useEffect(() => {
@@ -213,6 +228,8 @@ function App() {
   const handleRecordWastage = async (id, wasteAmount) => { const { data: ingData } = await supabase.from('inventory').select('stock_qty').eq('id', id).single(); const newStock = Number(ingData.stock_qty || 0) - Number(wasteAmount); await supabase.from('inventory').update({ stock_qty: newStock }).eq('id', id); fetchAllData(); setIsWastageOpen(false); };
   const updateProduct = async (id, updatedData) => { await supabase.from('products').update({ name: updatedData.name, price: parseFloat(updatedData.price), category: updatedData.category, recipe: updatedData.recipe || '' }).eq('id', id); fetchAllData(); setEditingProduct(null); };
 
+  // THE FIX: The Gatekeeper rules for what screen to show!
+  if (isRecovering) return <Auth isRecovering={true} onRecoveryComplete={() => { setIsRecovering(false); window.location.hash = ''; window.location.reload(); }} />;
   if (!session) return showLanding ? <LandingPage onLoginClick={() => setShowLanding(false)} /> : <Auth />;
   if (isKitchenKiosk) return <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f3f4f6', display: 'flex', flexDirection: 'column', zIndex: 9999 }}><button onClick={() => { setIsKitchenKiosk(false); localStorage.removeItem('tallybrew_kiosk'); }} style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10000, padding: '12px 20px', borderRadius: '12px', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>← Exit Kitchen Mode</button><KitchenDisplay /></div>;
 
@@ -264,7 +281,6 @@ function App() {
           
           <div className="main-content" style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
             
-            {/* FIX: Removed top padding entirely so the Dashboard sits perfectly flush */}
             {currentView === 'Dashboard' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: '0px' }}><Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} /></div>}
             
             {currentView === 'Kitchen' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><KitchenDisplay /></div>}
