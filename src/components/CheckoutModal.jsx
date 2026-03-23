@@ -370,7 +370,7 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
                   {index === 0 && (
                     <div className="cut-line" style={{ margin: '25px 0', borderBottom: '1px dashed #9ca3af', position: 'relative', textAlign: 'center' }}>
                       <span style={{ position: 'absolute', top: '-8px', left: '50%', transform: 'translateX(-50%)', background: '#fff', padding: '0 10px', fontSize: '10px', fontWeight: '800', color: '#9ca3af', letterSpacing: '2px' }}>
-                        ✂ CUT HERE ✂
+                        CUT HERE 
                       </span>
                     </div>
                   )}

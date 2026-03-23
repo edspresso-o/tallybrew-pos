@@ -108,15 +108,35 @@ function App() {
   const getOfflineQueue = () => { try { const stored = localStorage.getItem('tallybrew_offline_queue'); if (!stored) return []; if (stored.startsWith('[')) return JSON.parse(stored); return decryptData(stored); } catch (e) { return []; } };
   const clearStuckOfflineQueue = () => { localStorage.removeItem('tallybrew_offline_queue'); setPendingSalesCount(0); showAlert("Stuck orders cleared successfully.", "confirm"); };
 
+  // --- ADDED OFFLINE CACHE ENHANCEMENT ---
+  const loadFromCache = () => {
+    try {
+      const cachedMenu = localStorage.getItem('tb_cache_menu');
+      if (cachedMenu) setMenuItems(decryptData(cachedMenu));
+      
+      const cachedInv = localStorage.getItem('tb_cache_inv');
+      if (cachedInv) setInventory(decryptData(cachedInv));
+      
+      const cachedRecipes = localStorage.getItem('tb_cache_recipes');
+      if (cachedRecipes) setRecipes(decryptData(cachedRecipes));
+      
+      const cachedSales = localStorage.getItem('tb_cache_sales');
+      if (cachedSales) setSales(decryptData(cachedSales));
+    } catch (e) {
+      console.error("Failed to load offline cache");
+    }
+  };
+
   const fetchAllData = async () => {
     if (activeLocation === 'admin_remote' && empireBranches.length === 0) {
       const { data: bData } = await supabase.from('branches').select('*').order('name');
       if (bData && bData.length > 0) { setEmpireBranches(bData); if (!adminViewBranch) setAdminViewBranch(bData[0].id); }
     }
     const { data: pData } = await supabase.from('products').select('*').order('name', { ascending: true });
-    if (pData) setMenuItems(pData);
+    if (pData) { setMenuItems(pData); localStorage.setItem('tb_cache_menu', encryptData(pData)); }
+    
     const { data: rData } = await supabase.from('recipes').select('*');
-    if (rData) setRecipes(rData);
+    if (rData) { setRecipes(rData); localStorage.setItem('tb_cache_recipes', encryptData(rData)); }
 
     if (effectiveBranch && effectiveBranch !== 'admin_remote') {
       const { data: iData } = await supabase.from('inventory').select('*').eq('branch_id', effectiveBranch).order('name', { ascending: true });
@@ -129,13 +149,21 @@ function App() {
               const masterInv = allInv.filter(i => i.branch_id !== effectiveBranch);
               const uniqueItems = []; const map = new Map();
               masterInv.forEach(item => { if(!map.has(item.name.toLowerCase())) { map.set(item.name.toLowerCase(), true); uniqueItems.push({ name: item.name, stock_qty: 0, unit: item.unit, branch_id: effectiveBranch }); } });
-              if (uniqueItems.length > 0) { await supabase.from('inventory').insert(uniqueItems); const { data: newIData } = await supabase.from('inventory').select('*').eq('branch_id', effectiveBranch).order('name', { ascending: true }); setInventory(newIData || []); } else { setInventory([]); }
+              if (uniqueItems.length > 0) { 
+                await supabase.from('inventory').insert(uniqueItems); 
+                const { data: newIData } = await supabase.from('inventory').select('*').eq('branch_id', effectiveBranch).order('name', { ascending: true }); 
+                setInventory(newIData || []); 
+                if (newIData) localStorage.setItem('tb_cache_inv', encryptData(newIData));
+              } else { setInventory([]); }
             }
           } catch (e) { console.error("Error cloning:", e); } finally { isCloningInventory = false; }
         }
-      } else { setInventory(iData || []); }
+      } else { 
+        setInventory(iData || []); 
+        if (iData) localStorage.setItem('tb_cache_inv', encryptData(iData));
+      }
       const { data: sData } = await supabase.from('sales').select('*').eq('branch_id', effectiveBranch).order('created_at', { ascending: true });
-      if (sData) setSales(sData);
+      if (sData) { setSales(sData); localStorage.setItem('tb_cache_sales', encryptData(sData)); }
     }
   };
 
@@ -158,7 +186,16 @@ function App() {
     return () => subscription.unsubscribe(); 
   }, []);
 
-  useEffect(() => { if (session && isOnline) fetchAllData(); }, [session, isOnline, adminViewBranch]);
+  // --- ADDED OFFLINE CACHE CONDITION ---
+  useEffect(() => { 
+    if (session) {
+      if (isOnline) {
+        fetchAllData();
+      } else {
+        loadFromCache();
+      }
+    }
+  }, [session, isOnline, adminViewBranch]);
   
   useEffect(() => {
     const handleContextMenu = (e) => e.preventDefault(); document.addEventListener('contextmenu', handleContextMenu);
@@ -228,15 +265,11 @@ function App() {
   const handleRecordWastage = async (id, wasteAmount) => { const { data: ingData } = await supabase.from('inventory').select('stock_qty').eq('id', id).single(); const newStock = Number(ingData.stock_qty || 0) - Number(wasteAmount); await supabase.from('inventory').update({ stock_qty: newStock }).eq('id', id); fetchAllData(); setIsWastageOpen(false); };
   const updateProduct = async (id, updatedData) => { await supabase.from('products').update({ name: updatedData.name, price: parseFloat(updatedData.price), category: updatedData.category, recipe: updatedData.recipe || '' }).eq('id', id); fetchAllData(); setEditingProduct(null); };
 
-  // THE FIX: The Gatekeeper rules for what screen to show!
   if (isRecovering) return <Auth isRecovering={true} onRecoveryComplete={() => { setIsRecovering(false); window.location.hash = ''; window.location.reload(); }} />;
   if (!session) return showLanding ? <LandingPage onLoginClick={() => setShowLanding(false)} /> : <Auth />;
   if (isKitchenKiosk) return <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f3f4f6', display: 'flex', flexDirection: 'column', zIndex: 9999 }}><button onClick={() => { setIsKitchenKiosk(false); localStorage.removeItem('tallybrew_kiosk'); }} style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10000, padding: '12px 20px', borderRadius: '12px', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>← Exit Kitchen Mode</button><KitchenDisplay /></div>;
 
   const displayedItems = activeCategory === 'All' ? menuItems.filter(i => i.category !== 'Add-on' && i.category !== 'Milk') : menuItems;
-
-  // THE FIX: Changed threshold from 15 to 20
-  const lowStockItems = inventory.filter(item => Number(item.stock_qty) <= 20);
 
   return (
     <>

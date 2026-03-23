@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
+const SECRET_KEY = "TallyBrew@2026_SecureVault_X99!";
+
+const encryptData = (data) => {
+  const text = JSON.stringify(data); let result = '';
+  for (let i = 0; i < text.length; i++) result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+  return btoa(result); 
+};
+const decryptData = (encryptedData) => {
+  try {
+    const text = atob(encryptedData); let result = '';
+    for (let i = 0; i < text.length; i++) result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+    return JSON.parse(result);
+  } catch (e) { return null; }
+};
+
 export default function CashierLock({ onUnlock }) {
   const [cashiers, setCashiers] = useState([]);
   const [selectedCashier, setSelectedCashier] = useState(null);
@@ -19,19 +34,40 @@ export default function CashierLock({ onUnlock }) {
   const fetchCashiers = async () => {
     setIsLoading(true);
     const activeBranch = localStorage.getItem('tallybrew_branch');
+    
+    // OFFLINE ENHANCEMENT: Load from cache if offline
+    if (!navigator.onLine) {
+      const cachedProfiles = localStorage.getItem('tb_cache_profiles');
+      if (cachedProfiles) {
+        const parsedProfiles = decryptData(cachedProfiles);
+        if (parsedProfiles && Array.isArray(parsedProfiles)) {
+          let filtered = parsedProfiles;
+          if (activeBranch === 'admin_remote') {
+            filtered = filtered.filter(p => !p.branch_id);
+          } else if (activeBranch) {
+            filtered = filtered.filter(p => p.branch_id === activeBranch);
+          }
+          setCashiers(filtered.sort((a, b) => a.username.localeCompare(b.username)));
+        }
+      }
+      setIsLoading(false);
+      return;
+    }
+
+    // NORMAL ONLINE FETCH
     let query = supabase.from('profiles').select('*').order('username');
-    
-    
     if (activeBranch === 'admin_remote') {
-      
       query = query.is('branch_id', null);
     } else if (activeBranch) {
-     
       query = query.eq('branch_id', activeBranch);
     }
 
     const { data } = await query;
-    if (data) setCashiers(data);
+    if (data) {
+      setCashiers(data);
+      // OFFLINE ENHANCEMENT: Cache profiles securely for offline use
+      localStorage.setItem('tb_cache_profiles', encryptData(data));
+    }
     
     setIsLoading(false); 
   };
@@ -69,7 +105,7 @@ export default function CashierLock({ onUnlock }) {
   };
 
   const handleEmergencyLogout = async () => {
-    await supabase.auth.signOut();
+    if (navigator.onLine) await supabase.auth.signOut();
     localStorage.removeItem('tallybrew_branch');
     window.location.reload();
   };
@@ -79,6 +115,12 @@ export default function CashierLock({ onUnlock }) {
     if (!newStaffName.trim() || newStaffPin.length !== 6) {
       setIsAddError(true);
       setAddStatusMsg("Name is required and PIN must be 6 digits.");
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setIsAddError(true);
+      setAddStatusMsg("Cannot add staff while offline.");
       return;
     }
 
