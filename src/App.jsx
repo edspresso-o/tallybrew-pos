@@ -274,24 +274,60 @@ function App() {
   return (
     <>
       <style>{`
-        * { -webkit-touch-callout: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; touch-action: manipulation; }
-        input, textarea, select { -webkit-user-select: auto; -moz-user-select: auto; -ms-user-select: auto; user-select: auto; }
-        button { -webkit-tap-highlight-color: transparent !important; transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.1s, box-shadow 0.1s ease !important; }
-        button:active:not(:disabled) { transform: scale(0.95) !important; opacity: 0.85 !important; }
-        button:disabled { cursor: not-allowed !important; }
-        .popup-overlay > div { width: 92% !important; max-width: 420px !important; max-height: 90vh !important; overflow-y: auto !important; box-sizing: border-box !important; }
-        .popup-overlay > div::-webkit-scrollbar { display: none; } .popup-overlay > div { -ms-overflow-style: none; scrollbar-width: none; }
-        @media (max-width: 600px) { .main-content > div { padding: 15px !important; } .kpi-grid { grid-template-columns: 1fr !important; } }
-        .responsive-cart-wrapper { height: 100%; z-index: 1000; background: #fff; display: flex; flex-direction: column; } .mobile-cart-fab { display: none; } .mobile-cart-close-btn { display: none; }
+        /* Fix for the white gap at the bottom on iOS */
+        html, body, #root { 
+          height: 100% !important; 
+          margin: 0; 
+          padding: 0; 
+          background-color: #f3f4f6; /* This ensures if there is a gap, it matches your app bg */
+          overflow: hidden;
+          position: fixed; /* Prevents unwanted rubber-band scrolling */
+          width: 100%;
+        }
+
+        * { 
+          -webkit-touch-callout: none; 
+          -webkit-user-select: none; 
+          user-select: none; 
+          touch-action: manipulation; 
+          box-sizing: border-box;
+        }
+
+        input, textarea, select { -webkit-user-select: auto; user-select: auto; }
+
+        /* Updated POS Container to fill 100% of the viewport including bottom notch */
+        .pos-container { 
+          position: fixed; 
+          top: 0; 
+          left: 0; 
+          right: 0; 
+          bottom: 0 !important; 
+          height: 100vh !important;
+          height: -webkit-fill-available !important; /* The magic fix for iOS height */
+          display: flex; 
+          background-color: #f3f4f6; 
+          overflow: hidden; 
+        }
+
+        /* Ensure the sidebar goes all the way to the bottom */
+        .sidebar {
+          height: 100% !important;
+          padding-bottom: env(safe-area-inset-bottom); /* Adds spacing for the iPhone bar but keeps the black BG behind it */
+        }
+
         @media (max-width: 850px) {
           .scroll-container { padding-top: 85px !important; }
-          .responsive-cart-wrapper { position: fixed; top: 0; right: -100%; width: 85% !important; max-width: 400px; transition: right 0.3s ease; box-shadow: -5px 0 25px rgba(0,0,0,0.2); }
+          .responsive-cart-wrapper { 
+            position: fixed; 
+            top: 0; 
+            right: -100%; 
+            width: 85% !important; 
+            height: 100% !important;
+            transition: right 0.3s ease; 
+            box-shadow: -5px 0 25px rgba(0,0,0,0.2); 
+          }
           .responsive-cart-wrapper.open { right: 0; }
-          .mobile-cart-fab { display: flex; position: fixed; bottom: 25px; right: 25px; background: #3B2213; color: #fff; padding: 16px 24px; border-radius: 30px; font-size: 15px; font-weight: 900; box-shadow: 0 8px 20px rgba(59,34,19,0.4); border: 2px solid #E6D0A9; z-index: 998; align-items: center; gap: 10px; cursor: pointer; }
-          .mobile-cart-close-btn { display: flex; background: #3B2213; color: #E6D0A9; border: none; padding: 15px 25px; font-weight: 900; font-size: 16px; text-transform: uppercase; cursor: pointer; align-items: center; justify-content: flex-start; gap: 10px; }
-          .mobile-only-overlay { display: block !important; }
         }
-        @media (min-width: 851px) { .mobile-only-overlay { display: none !important; } }
       `}</style>
 
       {(!isOnline || pendingSalesCount > 0) && (
