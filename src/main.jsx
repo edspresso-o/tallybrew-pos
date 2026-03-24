@@ -1,16 +1,20 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx' // 1. Import the safety net
 import './index.css'
 
-// 1. Import the offline PWA function
+// Import the offline PWA function
 import { registerSW } from 'virtual:pwa-register'
 
-// 2. Start the offline caching robot!
+// Start the offline caching robot!
 registerSW({ immediate: true })
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    {/* 2. Wrap the app so if it crashes, the boundary catches it */}
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

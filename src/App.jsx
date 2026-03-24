@@ -274,45 +274,35 @@ function App() {
   return (
     <>
       <style>{`
-        html, body { 
-          margin: 0; 
-          padding: 0; 
-          background-color: #f3f4f6;
-          min-height: 100%;
+        /* VITE DEFAULT OVERRIDE - Fixes the huge blank gaps on the sides */
+        html, body, #root {
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 100% !important;
+          max-width: none !important;
+          height: 100% !important;
+          background-color: #f3f4f6 !important;
+          text-align: left !important;
         }
 
-        * { 
-          -webkit-touch-callout: none; 
-          -webkit-user-select: none; 
-          user-select: none; 
-          touch-action: manipulation; 
-        }
-
-        input, textarea, select { -webkit-user-select: auto; user-select: auto; }
-
-        .pos-container { 
-          display: flex; 
-          min-height: 100vh;
-          background-color: #f3f4f6; 
-        }
-
+        * { -webkit-touch-callout: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; touch-action: manipulation; }
+        input, textarea, select { -webkit-user-select: auto; -moz-user-select: auto; -ms-user-select: auto; user-select: auto; }
+        button { -webkit-tap-highlight-color: transparent !important; transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.1s, box-shadow 0.1s ease !important; }
+        button:active:not(:disabled) { transform: scale(0.95) !important; opacity: 0.85 !important; }
+        button:disabled { cursor: not-allowed !important; }
+        .popup-overlay > div { width: 92% !important; max-width: 420px !important; max-height: 90vh !important; overflow-y: auto !important; box-sizing: border-box !important; }
+        .popup-overlay > div::-webkit-scrollbar { display: none; } .popup-overlay > div { -ms-overflow-style: none; scrollbar-width: none; }
+        @media (max-width: 600px) { .main-content > div { padding: 15px !important; } .kpi-grid { grid-template-columns: 1fr !important; } }
+        .responsive-cart-wrapper { height: 100%; z-index: 1000; background: #fff; display: flex; flex-direction: column; } .mobile-cart-fab { display: none; } .mobile-cart-close-btn { display: none; }
         @media (max-width: 850px) {
-          .scroll-container { padding-top: 20px; }
-          .sidebar {
-            position: fixed;
-            z-index: 2000;
-          }
-          .responsive-cart-wrapper { 
-            position: fixed; 
-            top: 0; 
-            right: -100%; 
-            width: 85%; 
-            height: 100%;
-            transition: right 0.3s ease; 
-            background: white;
-          }
+          .scroll-container { padding-top: 85px !important; }
+          .responsive-cart-wrapper { position: fixed; top: 0; right: -100%; width: 85% !important; max-width: 400px; transition: right 0.3s ease; box-shadow: -5px 0 25px rgba(0,0,0,0.2); }
           .responsive-cart-wrapper.open { right: 0; }
+          .mobile-cart-fab { display: flex; position: fixed; bottom: 25px; right: 25px; background: #3B2213; color: #fff; padding: 16px 24px; border-radius: 30px; font-size: 15px; font-weight: 900; box-shadow: 0 8px 20px rgba(59,34,19,0.4); border: 2px solid #E6D0A9; z-index: 998; align-items: center; gap: 10px; cursor: pointer; }
+          .mobile-cart-close-btn { display: flex; background: #3B2213; color: #E6D0A9; border: none; padding: 15px 25px; font-weight: 900; font-size: 16px; text-transform: uppercase; cursor: pointer; align-items: center; justify-content: flex-start; gap: 10px; }
+          .mobile-only-overlay { display: block !important; }
         }
+        @media (min-width: 851px) { .mobile-only-overlay { display: none !important; } }
       `}</style>
 
       {(!isOnline || pendingSalesCount > 0) && (
