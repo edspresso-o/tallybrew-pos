@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-const SECRET_KEY = "TallyBrew@2026_SecureVault_X99!";
+// ==========================================
+// 1. SECURE OFFLINE ENCRYPTION (Environment Variable)
+// ==========================================
+const SECRET_KEY = import.meta.env.VITE_OFFLINE_VAULT_KEY || "Fallback_Key_Do_Not_Use_In_Prod";
 
 const encryptData = (data) => {
   const text = JSON.stringify(data); let result = '';
@@ -18,15 +21,22 @@ const decryptData = (encryptedData) => {
 };
 
 export default function Auth({ isRecovering, onRecoveryComplete }) {
+  // ==========================================
+  // 2. UI & FLOW STATE
+  // ==========================================
   const [isLogin, setIsLogin] = useState(!isRecovering);
   const [isResetting, setIsResetting] = useState(false); 
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(isRecovering || false);
   const [loading, setLoading] = useState(false);
   const [awaitingOtp, setAwaitingOtp] = useState(false); 
-  
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // ==========================================
+  // 3. FORM DATA STATE
+  // ==========================================
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(localStorage.getItem('tallybrew_branch') || '');
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -34,14 +44,13 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
   const [role, setRole] = useState('cashier'); 
   const [terminalPin, setTerminalPin] = useState(''); 
   const [otpCode, setOtpCode] = useState(''); 
-  
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
+  // ==========================================
+  // 4. INITIALIZATION (Branches & Listeners)
+  // ==========================================
   useEffect(() => {
     const fetchBranches = async () => {
-      // OFFLINE ENHANCEMENT: Allow login even if we can't fetch branches
-      if (!navigator.onLine) return;
+      if (!navigator.onLine) return; // Allow offline bypass
       const { data } = await supabase.from('branches').select('*');
       if (data) setBranches(data);
     };
@@ -49,6 +58,7 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
   }, []);
 
   useEffect(() => {
+    // Listen for password reset clicks from email
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsUpdatingPassword(true);
@@ -59,50 +69,9 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleBranchChange = (e) => {
-    const branchId = e.target.value;
-    setSelectedBranch(branchId);
-  };
-
-  const handleForgotPassword = async (e) => {
-    e.preventDefault();
-    if (!navigator.onLine) return setError("You must be online to reset your password.");
-    setLoading(true); setError(''); setSuccessMsg('');
-
-    try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin, 
-      });
-      if (resetError) throw resetError;
-      setSuccessMsg("Reset link sent! Please check your email inbox.");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdatePassword = async (e) => {
-    e.preventDefault();
-    if (!navigator.onLine) return setError("You must be online to update your password.");
-    setLoading(true); setError(''); setSuccessMsg('');
-
-    try {
-      if (newPassword.length < 6) throw new Error("Password must be at least 6 characters.");
-      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
-      if (updateError) throw updateError;
-      
-      setSuccessMsg("Password updated successfully! Logging you in...");
-      setNewPassword('');
-      
-      setTimeout(() => {
-        if (onRecoveryComplete) onRecoveryComplete();
-        else window.location.reload();
-      }, 1500);
-
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
-  };
-
+  // ==========================================
+  // 5. AUTHENTICATION HANDLERS
+  // ==========================================
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true); setError(''); setSuccessMsg('');
@@ -111,7 +80,6 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
       if (!selectedBranch && !isRecovering && navigator.onLine) throw new Error("Please select a Store Location first.");
 
       if (isLogin) {
-        
         // --- SECURE OFFLINE VAULT LOGIC ---
         if (!navigator.onLine) {
           const vaultData = localStorage.getItem('tb_offline_vault');
@@ -121,7 +89,7 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
               if (selectedBranch && vault.branch_id !== selectedBranch) throw new Error("Credentials match, but not for this location.");
               
               localStorage.setItem('tallybrew_branch', vault.branch_id);
-              localStorage.setItem('tb_offline_session', 'true'); // Flag to tell App.jsx we are allowed in
+              localStorage.setItem('tb_offline_session', 'true'); 
               setSuccessMsg("Offline Vault Unlocked! Logging you in...");
               setTimeout(() => window.location.reload(), 1000);
               return;
@@ -129,14 +97,14 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
           }
           throw new Error("No internet connection and no offline vault matches these credentials.");
         }
-        // ----------------------------------
 
-        // NORMAL ONLINE LOGIC
+        // --- NORMAL ONLINE LOGIC ---
         const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) throw loginError;
         
         const userBranch = data.user?.user_metadata?.branch_id;
 
+        // Verify Branch Lock
         if (userBranch && userBranch !== selectedBranch) {
           await supabase.auth.signOut(); 
           let intendedLocation = "another location";
@@ -149,14 +117,14 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
           throw new Error(`Access Denied: This email is strictly locked to ${intendedLocation}.`);
         }
 
-        // SAVE SUCCESSFUL LOGIN TO OFFLINE VAULT
+        // Save Successful Login to Offline Vault
         localStorage.setItem('tallybrew_branch', selectedBranch);
         localStorage.setItem('tb_offline_vault', encryptData({ email, password, branch_id: selectedBranch }));
         localStorage.setItem('tb_offline_session', 'true');
-        
         window.location.reload(); 
 
       } else {
+        // --- SIGN UP LOGIC ---
         if (!navigator.onLine) throw new Error("You must be online to create an account.");
         if (!username) throw new Error("Please enter a display name.");
         if (terminalPin.length !== 6) throw new Error("Your Terminal PIN must be exactly 6 digits.");
@@ -184,6 +152,7 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
       const { data, error: verifyError } = await supabase.auth.verifyOtp({ email, token: otpCode, type: 'signup' });
       if (verifyError) throw verifyError;
 
+      // Insert Profile Data after successful verification
       if (data?.user) {
         const { error: profileError } = await supabase.from('profiles').insert([
           { username: username, role: role, pin: terminalPin, branch_id: selectedBranch }
@@ -195,16 +164,55 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
       localStorage.setItem('tallybrew_branch', selectedBranch);
       localStorage.setItem('tb_offline_vault', encryptData({ email, password, branch_id: selectedBranch }));
       localStorage.setItem('tb_offline_session', 'true');
-      
       window.location.reload();
 
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
+  // ==========================================
+  // 6. PASSWORD RECOVERY HANDLERS
+  // ==========================================
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!navigator.onLine) return setError("You must be online to reset your password.");
+    setLoading(true); setError(''); setSuccessMsg('');
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin, 
+      });
+      if (resetError) throw resetError;
+      setSuccessMsg("Reset link sent! Please check your email inbox.");
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
+  };
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (!navigator.onLine) return setError("You must be online to update your password.");
+    setLoading(true); setError(''); setSuccessMsg('');
+
+    try {
+      if (newPassword.length < 6) throw new Error("Password must be at least 6 characters.");
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+      
+      setSuccessMsg("Password updated successfully! Logging you in...");
+      setNewPassword('');
+      setTimeout(() => {
+        if (onRecoveryComplete) onRecoveryComplete();
+        else window.location.reload();
+      }, 1500);
+
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
+  };
+
+  // ==========================================
+  // 7. RENDER COMPONENT
+  // ==========================================
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif", padding: '20px', boxSizing: 'border-box' }}>
       
-     <img 
+      <img 
         src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
         alt="TallyBrew Logo" 
         style={{ width: '100%', maxWidth: '300px', maxHeight: '150px', objectFit: 'contain', marginBottom: '20px' }} 
@@ -263,13 +271,12 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
           </form>
 
         ) : (
-          
           <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
             <div style={{ position: 'relative' }}>
               <select 
                 value={selectedBranch} 
-                onChange={handleBranchChange} 
+                onChange={(e) => setSelectedBranch(e.target.value)} 
                 style={{ ...inputStyle, appearance: 'none', cursor: 'pointer', border: '2px solid #B56124', width: '100%', boxSizing: 'border-box' }} 
                 required={navigator.onLine}
               >
@@ -344,5 +351,8 @@ export default function Auth({ isRecovering, onRecoveryComplete }) {
   );
 }
 
+// ==========================================
+// 8. STYLING COMPONENTS
+// ==========================================
 const inputStyle = { background: '#F5E8D2', border: 'none', borderRadius: '12px', padding: '14px 18px', fontSize: '14px', fontWeight: '600', color: '#3B2213', outline: 'none', width: '100%', boxSizing: 'border-box' };
 const btnStyle = (disabled) => ({ background: '#3B2213', color: '#fff', border: 'none', padding: '16px', borderRadius: '12px', fontSize: '16px', fontWeight: '800', cursor: disabled ? 'not-allowed' : 'pointer', marginTop: '5px', transition: '0.2s', opacity: disabled ? 0.7 : 1, width: '100%', boxSizing: 'border-box' });

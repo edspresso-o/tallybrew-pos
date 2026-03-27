@@ -1,7 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
-import ErrorBoundary from './components/ErrorBoundary.jsx' // 1. Import the safety net
+import ErrorBoundary from './components/ErrorBoundary.jsx' 
+import { AuthProvider } from './context/AuthContext.jsx' // <-- 1. Import your new Vault here!
 import './index.css'
 
 // Import the offline PWA function
@@ -12,9 +13,12 @@ registerSW({ immediate: true })
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    {/* 2. Wrap the app so if it crashes, the boundary catches it */}
+    {/* The safety net catches everything inside it */}
     <ErrorBoundary>
-      <App />
+      {/* 2. Wrap the AuthProvider exactly here, around the App */}
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </ErrorBoundary>
   </StrictMode>,
 )

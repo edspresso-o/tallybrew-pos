@@ -1,23 +1,19 @@
 import React, { useState } from 'react';
 
-
 const SmoothMenuImage = ({ src, alt, available }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
 
-  
   if (!src || hasError) {
     return <div style={{ width: '100%', height: '100%', backgroundColor: '#ffffff' }}></div>;
   }
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#ffffff', overflow: 'hidden' }}>
-      {}
       {!isLoaded && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#ffffff' }}></div>
       )}
       
-      { }
       <img
         src={src}
         alt={alt}
@@ -31,7 +27,6 @@ const SmoothMenuImage = ({ src, alt, available }) => {
           boxSizing: 'border-box',
           opacity: isLoaded ? 1 : 0, 
           transition: 'opacity 0.4s ease-in-out',
-          
           filter: available ? 'none' : 'grayscale(100%)' 
         }}
       />
@@ -61,7 +56,7 @@ export default function Menu({
     
     if (drinkRecipe.length > 0) {
       for (const ingredientReq of drinkRecipe) {
-       
+       // Future recipe logic goes here
       }
     }
 
@@ -89,10 +84,14 @@ export default function Menu({
   return (
     <div className="main-menu" style={{ padding: '20px', flex: 1, width: '100%', boxSizing: 'border-box', overflowY: 'auto' }}>
       
-      {}
-      <div className="menu-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '15px', marginBottom: '25px' }}>
+      {/* UPDATED HEADER: 
+        Added marginTop: '50px' here to push it down below the mobile button.
+        Removed the paddingLeft from the title container.
+      */}
+      <div className="menu-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '15px', marginBottom: '25px', marginTop: '50px' }}>
+        
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: '900', margin: 0, color: '#000', letterSpacing: '-1px' }}>Menu</h1>
+          <h1 style={{ fontSize: '32px', fontWeight: '900', margin: 0, color: '#000', letterSpacing: '-1px' }}>Menu</h1>
           <span 
             onClick={onManageClick}
             style={{ fontSize: '18px', color: '#9ca3af', fontWeight: '800', cursor: 'pointer', transition: 'color 0.2s', letterSpacing: '-0.5px' }}
@@ -110,7 +109,7 @@ export default function Menu({
           {isDeleteMode ? 'Done Removing' : 'Remove Items'}
         </button>
       </div>
-        {   }
+
       <div className="category-pills" style={{ display: 'flex', gap: '10px', marginBottom: '25px', overflowX: 'auto', paddingBottom: '10px', WebkitOverflowScrolling: 'touch' }}>
         {categories.map(cat => (
           <button 
@@ -124,7 +123,6 @@ export default function Menu({
         ))}
       </div>
 
-      {}
       <div className="product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '12px' }}>
         {filteredItems.map(item => {
           
@@ -173,7 +171,6 @@ export default function Menu({
               )}
 
               <div className="product-image" style={{ width: '100%', height: '80px', backgroundColor: '#ffffff', borderRadius: '12px', marginBottom: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {}
                 <SmoothMenuImage src={item.image_url} alt={item.name} available={available} />
               </div>
               

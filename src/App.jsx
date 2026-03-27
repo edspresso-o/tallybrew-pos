@@ -24,11 +24,12 @@ import ModifierModal from './components/modals/ModifierModal.jsx';
 import { StartShiftModal, EndShiftModal, ShiftReportModal } from './components/modals/ShiftModals.jsx';
 import { useCart } from './hooks/useCart.js';
 import { useShift } from './hooks/useShift.js';
+import { CartContext } from './context/CartContext.jsx';
 
 import './App.css';
 
 let isCloningInventory = false;
-const SECRET_KEY = "TallyBrew@2026_SecureVault_X99!";
+const SECRET_KEY = import.meta.env.VITE_OFFLINE_VAULT_KEY;
 
 const encryptData = (data) => {
   const text = JSON.stringify(data); let result = '';
@@ -85,16 +86,17 @@ function App() {
     ? (adminViewBranch || (empireBranches.length > 0 ? empireBranches[0].id : null)) 
     : activeLocation;
 
-  // --- ALERTS ---
   const showAlert = (message, type = 'error') => setAppAlert({ isOpen: true, type, message, onConfirm: null });
   const showConfirm = (message, onConfirmCallback) => setAppAlert({ isOpen: true, type: 'confirm', message, onConfirm: onConfirmCallback });
   const closeAlert = () => setAppAlert({ ...appAlert, isOpen: false });
 
+  const cartState = useCart(inventory, recipes, menuItems, showAlert);
+  
   const { 
     cart, setCart, savedOrders, discount, setDiscount, modifierModal, setModifierModal,
     availableMilks, availableAddons, handleHoldOrder, handleResumeOrder, handleDeleteSavedOrder, 
     handleClearCart, handleItemClick, toggleAddon, confirmModifiersAndAddToCart, updateQty, previewExtraCost 
-  } = useCart(inventory, recipes, menuItems, showAlert);
+  } = cartState;
 
   const {
     activeCashier, setActiveCashier, activeShift, setActiveShift, pendingCashier, setPendingCashier, 
@@ -103,12 +105,9 @@ function App() {
     prepareEndShift, closeRegister, handlePrintZReading, finalizeShiftAndLogout
   } = useShift(effectiveBranch, showAlert, setCurrentView);
 
-
-  // --- DATABASE & SYNC ---
   const getOfflineQueue = () => { try { const stored = localStorage.getItem('tallybrew_offline_queue'); if (!stored) return []; if (stored.startsWith('[')) return JSON.parse(stored); return decryptData(stored); } catch (e) { return []; } };
   const clearStuckOfflineQueue = () => { localStorage.removeItem('tallybrew_offline_queue'); setPendingSalesCount(0); showAlert("Stuck orders cleared successfully.", "confirm"); };
 
-  // --- ADDED OFFLINE CACHE ENHANCEMENT ---
   const loadFromCache = () => {
     try {
       const cachedMenu = localStorage.getItem('tb_cache_menu');
@@ -177,7 +176,7 @@ function App() {
     }); 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => { 
       if (event === 'PASSWORD_RECOVERY') setIsRecovering(true);
-      if (event === 'SIGNED_OUT') localStorage.removeItem('tb_offline_session'); // Clear vault on logout
+      if (event === 'SIGNED_OUT') localStorage.removeItem('tb_offline_session'); 
       
       const isOfflineVault = localStorage.getItem('tb_offline_session') === 'true';
       setSession(session || isOfflineVault); 
@@ -186,7 +185,6 @@ function App() {
     return () => subscription.unsubscribe(); 
   }, []);
 
-  // --- ADDED OFFLINE CACHE CONDITION ---
   useEffect(() => { 
     if (session) {
       if (isOnline) {
@@ -272,9 +270,8 @@ function App() {
   const displayedItems = activeCategory === 'All' ? menuItems.filter(i => i.category !== 'Add-on' && i.category !== 'Milk') : menuItems;
 
   return (
-    <>
+    <CartContext.Provider value={cartState}>
       <style>{`
-        /* VITE DEFAULT OVERRIDE - Fixes the huge blank gaps on the sides */
         html, body, #root {
           margin: 0 !important;
           padding: 0 !important;
@@ -324,6 +321,7 @@ function App() {
         <div className="pos-container no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', backgroundColor: '#f3f4f6', overflow: 'hidden' }}>
           <button className="mobile-nav-toggle" onClick={() => setIsMobileNavOpen(true)}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
           <div className={`sidebar-overlay ${isMobileNavOpen ? 'open' : ''}`} onClick={() => setIsMobileNavOpen(false)}></div>
+          
           <Sidebar currentView={currentView} setCurrentView={handleNavigationRequest} activeCashier={activeCashier} isMobileNavOpen={isMobileNavOpen} setIsMobileNavOpen={setIsMobileNavOpen} activeShift={activeShift} />
           
           <div className="main-content" style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
@@ -362,7 +360,6 @@ function App() {
         </div>
       ) : null}
 
-      {/* --- IMPORTED PHASE 1 MODALS --- */}
       <GlobalAlert appAlert={appAlert} closeAlert={closeAlert} />
       <ManagerAuthModal showManagerAuth={showManagerAuth} setShowManagerAuth={setShowManagerAuth} managerPinInput={managerPinInput} setManagerPinInput={setManagerPinInput} executeManagerOverride={executeManagerOverride} setPendingAction={setPendingAction} />
       <ModifierModal modifierModal={modifierModal} setModifierModal={setModifierModal} availableMilks={availableMilks} availableAddons={availableAddons} previewExtraCost={previewExtraCost} toggleAddon={toggleAddon} confirmModifiersAndAddToCart={confirmModifiersAndAddToCart} />
@@ -370,7 +367,6 @@ function App() {
       <EndShiftModal showEndShift={showEndShift} setShowEndShift={setShowEndShift} shiftStats={shiftStats} activeCashier={activeCashier} endingCashInput={endingCashInput} setEndingCashInput={setEndingCashInput} closeRegister={closeRegister} />
       <ShiftReportModal showShiftReport={showShiftReport} shiftStats={shiftStats} activeCashier={activeCashier} handlePrintZReading={handlePrintZReading} finalizeShiftAndLogout={finalizeShiftAndLogout} baseUrl={import.meta.env.BASE_URL} />
 
-      {/* ORIGINAL MODALS */}
       {isCheckoutOpen && <CheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} total={cart.reduce((s, i) => s + (i.price * i.qty), 0) * (1 - discount.rate)} onConfirm={confirmPaymentAndSave} cart={cart} discount={discount} />}
       {isRestockOpen && <ManualRestock isOpen={isRestockOpen} onClose={() => { setIsRestockOpen(false); setSelectedInventoryItem(null); }} menuItems={inventory} onRestock={handleManualRestock} preselectedItem={selectedInventoryItem} />}
       {isAddProductOpen && <AddProduct onClose={() => setIsAddProductOpen(false)} addProduct={addProduct} ingredients={inventory} categories={categories.filter(c => c !== 'All')} />}
@@ -378,7 +374,7 @@ function App() {
       {isWastageOpen && <RecordWastage onClose={() => setIsWastageOpen(false)} inventory={inventory} onRecordWastage={handleRecordWastage} />}
       {editingProduct && <EditProduct isOpen={!!editingProduct} onClose={() => setEditingProduct(null)} product={editingProduct} onUpdate={updateProduct} ingredients={inventory} categories={categories.filter(c => c !== 'All')} />}
       {isDiscountOpen && <DiscountModal onClose={() => setIsDiscountOpen(false)} applyDiscount={setDiscount} currentDiscount={discount} />}
-    </>
+    </CartContext.Provider>
   );
 }
 
