@@ -4,7 +4,6 @@ import { supabase } from '../supabaseClient';
 export default function Dashboard({ sales = [], menuItems = [] }) {
   const [timeFilter, setTimeFilter] = useState('Today');
   
-  
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(localStorage.getItem('tallybrew_branch') || 'All');
   const [activeSales, setActiveSales] = useState(sales);
@@ -112,6 +111,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
   const maxChartValue = Math.max(...weeklyChartData.map(d => d.total), 1);
 
 
+  // --- NEW, HIGHLY ORGANIZED EXPORT LOGIC ---
   const handleExport = async () => {
     setIsExporting(true);
 
@@ -137,66 +137,24 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         return true;
       });
 
+      // Global Stats
       const avgOrderValue = ordersServed > 0 ? (totalSales / ordersServed) : 0;
       const totalItemsSold = filteredSales.reduce((sum, s) => sum + Number(s.items_count || 0), 0);
       
       let totalCashReceived = 0;
       let totalGCashReceived = 0;
-      let dineInCount = 0;
-      let takeoutCount = 0;
-      let discountedOrders = 0;
       
-      const itemCounts = {};
-      const uniqueCustomers = new Set();
-
       filteredSales.forEach(s => {
         const amount = Number(s.total_amount || 0);
         const cAmt = Number(s.cash_amount || 0);
         const gAmt = Number(s.gcash_amount || 0);
-
         if (s.payment_method === 'GCash' && cAmt === 0 && gAmt === 0) totalGCashReceived += amount;
         else if (s.payment_method === 'Cash' && cAmt === 0 && gAmt === 0) totalCashReceived += amount;
         else { totalCashReceived += cAmt; totalGCashReceived += gAmt; }
-
-        const summary = s.items_summary || '';
-        if (summary.includes('DINE-IN')) dineInCount++;
-        if (summary.includes('TAKEOUT') || summary.includes('TAKE-OUT')) takeoutCount++;
-        if (summary.includes('(w/')) discountedOrders++;
-
-        let orderTypeMatch = summary.match(/\[(.*?)\]/);
-        let pureItems = summary;
-        let customerName = "Guest";
-
-        if (orderTypeMatch) {
-          pureItems = pureItems.replace(`[${orderTypeMatch[1]}] `, '');
-        }
-
-        const customerSplit = pureItems.split(' - ');
-        if (customerSplit.length > 1) {
-          customerName = customerSplit[0].replace(/\s*\(Ref:.*?\)/, '').trim();
-          pureItems = customerSplit.slice(1).join(' - ');
-        }
-        
-        if (customerName && customerName !== 'Guest') {
-          uniqueCustomers.add(customerName);
-        }
-
-        pureItems = pureItems.replace(/\(w\/.*?Discount\)/g, '');
-        pureItems.split(', ').forEach(part => {
-          const match = part.match(/(\d+)x (.+)/);
-          if (match) {
-            const qty = parseInt(match[1]);
-            const name = match[2].trim();
-            itemCounts[name] = (itemCounts[name] || 0) + qty;
-          }
-        });
       });
 
-      const cashPct = totalSales > 0 ? ((totalCashReceived / totalSales) * 100).toFixed(1) : 0;
-      const gcashPct = totalSales > 0 ? ((totalGCashReceived / totalSales) * 100).toFixed(1) : 0;
-      const sortedTopItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
-      const branchName = selectedBranch === 'All' ? 'ALL BRANCHES' : (branches.find(b => b.id === selectedBranch)?.name || 'STORE');
-
+      const branchNameLabel = selectedBranch === 'All' ? 'ALL BRANCHES' : (branches.find(b => b.id === selectedBranch)?.name || 'STORE');
+      
       const escapeCSV = (val) => {
         if (val === null || val === undefined) return '""';
         const str = String(val);
@@ -206,138 +164,216 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
       let csv = '\uFEFF'; 
       
-      csv += "TALLYBREW_POS_ANALYTICS_MASTER_EXECUTIVE_REPORT,,,,,\n";
-      csv += `Generated On:,${escapeCSV(new Date().toLocaleString())},,,,\n`;
-      csv += `Location Filter:,${escapeCSV(branchName.toUpperCase())},,,,\n`;
-      csv += `Time Filter:,${escapeCSV(timeFilter.toUpperCase())},,,,\n`;
-      csv += ",,,,,\n";
+      // ==========================================
+      // GLOBAL HEADER
+      // ==========================================
+      csv += "TALLYBREW MASTER DATA EXPORT,,,,,,,,,,,\n";
+      csv += `Generated On:,${escapeCSV(new Date().toLocaleString())},,,,,,,,,,\n`;
+      csv += `Location Filter:,${escapeCSV(branchNameLabel.toUpperCase())},,,,,,,,,,\n`;
+      csv += `Time Filter:,${escapeCSV(timeFilter.toUpperCase())},,,,,,,,,,\n`;
+      csv += ",,,,,,,,,,,\n";
 
-      csv += "--- 1. EXECUTIVE SUMMARY ---,,,,,\n";
-      csv += "Total Gross Revenue,Total Transactions,Avg Order Value,Total Items Sold,Dine-In Orders,Take-Out Orders,Discounted Orders,Unique Customers\n";
-      csv += `${totalSales.toFixed(2)},${ordersServed},${avgOrderValue.toFixed(2)},${totalItemsSold},${dineInCount},${takeoutCount},${discountedOrders},${uniqueCustomers.size}\n`;
-      csv += ",,,,,\n"; 
-
-      csv += "--- 2. REVENUE BY PAYMENT METHOD ---,,,,,\n";
-      csv += "Payment Method,Total Received (PHP),Percentage of Sales,,,\n";
-      csv += `Physical Cash,${totalCashReceived.toFixed(2)},${cashPct}%,,,\n`;
-      csv += `GCash Transfers,${totalGCashReceived.toFixed(2)},${gcashPct}%,,,\n`;
-      csv += ",,,,,\n";
-
-      csv += "--- 3. Z-REPORT & SHIFT LOGS ---,,,,,\n";
-      csv += "Branch,Cashier Name,Clock In,Clock Out,Starting Float,Cash Dropped (Skim),Expected Drawer,Actual Drawer,Discrepancy\n";
-      if (filteredShifts.length === 0) {
-        csv += "No shift records found for this period.,,,,,,,\n";
-      } else {
-        filteredShifts.forEach(shift => {
-          const bName = branches.find(b => b.id === shift.branch_id)?.name || 'Unknown';
-          const clockIn = new Date(shift.start_time).toLocaleString();
-          const clockOut = shift.end_time ? new Date(shift.end_time).toLocaleString() : 'STILL ACTIVE';
-          const exp = Number(shift.expected_cash || 0);
-          const act = Number(shift.actual_cash || 0);
-          const short = Number(shift.shortage || 0);
-          const drop = Number(shift.cash_drops || 0);
-          
-          let discrepancy = 'Perfect';
-          if (short < 0) discrepancy = `SHORT: ${Math.abs(short).toFixed(2)}`;
-          if (short > 0) discrepancy = `OVER: ${short.toFixed(2)}`;
-
-          csv += `${escapeCSV(bName)},${escapeCSV(shift.cashier_name)},${escapeCSV(clockIn)},${escapeCSV(clockOut)},${Number(shift.starting_cash || 0).toFixed(2)},${drop.toFixed(2)},${exp.toFixed(2)},${act.toFixed(2)},${escapeCSV(discrepancy)}\n`;
-        });
+      // GLOBAL SUMMARY (Only show if looking at 'All Branches')
+      if (selectedBranch === 'All') {
+        csv += "--- GLOBAL OVERVIEW (ALL BRANCHES) ---,,,,,,,,,,,\n";
+        csv += "Total Gross Revenue,Total Transactions,Avg Order Value,Total Items Sold,Total Physical Cash,Total GCash\n";
+        csv += `${totalSales.toFixed(2)},${ordersServed},${avgOrderValue.toFixed(2)},${totalItemsSold},${totalCashReceived.toFixed(2)},${totalGCashReceived.toFixed(2)}\n`;
+        csv += ",,,,,,,,,,,\n"; 
       }
-      csv += ",,,,,,,,\n";
 
-      csv += "--- 4. PRODUCT PERFORMANCE (ITEMS SOLD) ---,,,,,\n";
-      csv += "Rank,Item Name,Quantity Sold,,,\n";
-      if (sortedTopItems.length === 0) {
-        csv += "-,No items sold in this period.,,,,\n";
-      } else {
-        sortedTopItems.forEach(([name, qty], index) => {
-          csv += `${index + 1},${escapeCSV(name)},${qty},,,\n`;
-        });
-      }
-      csv += ",,,,,\n";
+      // ==========================================
+      // BRANCH BY BRANCH BREAKDOWN
+      // ==========================================
+      const targetBranches = selectedBranch === 'All' ? branches : branches.filter(b => b.id === selectedBranch);
 
-      csv += "--- 5. COMPLETE INVENTORY AUDIT ---,,,,,\n";
-      csv += "Branch Location,Ingredient / Item Name,Current Stock Level,Unit,Status Warning\n";
-      const sortedInventory = [...activeInventory].sort((a, b) => Number(a.stock_qty || 0) - Number(b.stock_qty || 0));
-      sortedInventory.forEach(item => {
-        const stock = Number(item.stock_qty || 0);
-        let status = 'Healthy';
-        if (stock <= 0) status = 'OUT OF STOCK';
-        else if (stock <= 10) status = 'CRITICAL - RESTOCK NOW';
-        else if (stock <= 30) status = 'Low Stock';
+      targetBranches.forEach(branch => {
+        const bId = branch.id;
+        const bName = branch.name;
 
-        const itemBranchName = branches.find(b => b.id === item.branch_id)?.name || 'Unknown';
-        csv += `${escapeCSV(itemBranchName)},${escapeCSV(item.name)},${stock},${escapeCSV(item.unit)},${escapeCSV(status)}\n`;
-      });
-      if (sortedInventory.length === 0) csv += "-,No inventory data available.,,,,\n";
-      csv += ",,,,,\n";
+        // Filter data for this specific branch
+        const bSales = filteredSales.filter(s => s.branch_id === bId);
+        const bShifts = filteredShifts.filter(s => s.branch_id === bId);
+        const bInventory = activeInventory.filter(i => i.branch_id === bId);
 
-      csv += "--- 6. MASTER TRANSACTION LEDGER ---,,,,,\n";
-      csv += "Branch,Date,Time,Order ID,Customer Name,Order Type,Primary Method,Total Amount (PHP),Cash Part (PHP),GCash Part (PHP),Discount Applied,Items Breakdown\n";
-      
-      if (filteredSales.length === 0) {
-        csv += "No transactions found for this period.,,,,,\n";
-      } else {
-        const sortedSales = [...filteredSales].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        // Skip completely empty branches to avoid cluttering the report
+        if (bSales.length === 0 && bShifts.length === 0 && bInventory.length === 0) return;
 
-        sortedSales.forEach(s => {
-          const dateObj = new Date(s.created_at);
-          const date = dateObj.toLocaleDateString();
-          const time = dateObj.toLocaleTimeString();
-          
-          let method = s.payment_method || 'Cash';
-          let displayMethod = method;
-          if (method === 'GCash') {
-             const match = s.items_summary?.match(/\(Ref: (\d+)\)/);
-             if (match) displayMethod = `GCash (Ref: ${match[1]})`;
-          }
+        // Calculate Branch-Specific Metrics
+        let bTotalSales = 0, bItemsSold = 0, bDineIn = 0, bTakeout = 0, bDiscounted = 0;
+        let bCash = 0, bGCash = 0;
+        let bItemCounts = {};
+        let bUniqueCustomers = new Set();
 
-          let orderType = "Unknown";
+        bSales.forEach(s => {
+          const amount = Number(s.total_amount || 0);
+          bTotalSales += amount;
+          bItemsSold += Number(s.items_count || 0);
+
+          const cAmt = Number(s.cash_amount || 0);
+          const gAmt = Number(s.gcash_amount || 0);
+          if (s.payment_method === 'GCash' && cAmt === 0 && gAmt === 0) bGCash += amount;
+          else if (s.payment_method === 'Cash' && cAmt === 0 && gAmt === 0) bCash += amount;
+          else { bCash += cAmt; bGCash += gAmt; }
+
+          const summary = s.items_summary || '';
+          if (summary.includes('DINE-IN')) bDineIn++;
+          if (summary.includes('TAKEOUT') || summary.includes('TAKE-OUT')) bTakeout++;
+          if (summary.includes('(w/')) bDiscounted++;
+
+          let pureItems = summary;
+          let orderTypeMatch = pureItems.match(/\[(.*?)\]/);
+          if (orderTypeMatch) pureItems = pureItems.replace(`[${orderTypeMatch[1]}] `, '');
+
           let customerName = "Guest";
-          let discountType = "None";
-          let pureItems = s.items_summary || "No details";
-
-          const typeMatch = pureItems.match(/\[(.*?)\]/);
-          if (typeMatch) {
-            orderType = typeMatch[1];
-            pureItems = pureItems.replace(`[${orderType}] `, '');
-          }
-
           const customerSplit = pureItems.split(' - ');
           if (customerSplit.length > 1) {
-            customerName = customerSplit[0].replace(/\s*\(Ref:.*?\)/, '').trim(); 
+            customerName = customerSplit[0].replace(/\s*\(Ref:.*?\)/, '').trim();
             pureItems = customerSplit.slice(1).join(' - ');
           }
+          if (customerName !== 'Guest') bUniqueCustomers.add(customerName);
 
-          const discountMatch = pureItems.match(/\(w\/ (.*?) Discount\)/);
-          if (discountMatch) {
-            discountType = discountMatch[1];
-            pureItems = pureItems.replace(`(w/ ${discountType} Discount)`, '').trim();
-          }
-
-          const saleBranchName = branches.find(b => b.id === s.branch_id)?.name || 'Unknown';
-          const amt = Number(s.total_amount || 0);
-          let cAmt = Number(s.cash_amount || 0);
-          let gAmt = Number(s.gcash_amount || 0);
-          
-          if (method === 'Cash' && cAmt === 0 && gAmt === 0) cAmt = amt;
-          if (method === 'GCash' && cAmt === 0 && gAmt === 0) gAmt = amt;
-
-          csv += `${escapeCSV(saleBranchName)},${escapeCSV(date)},${escapeCSV(time)},${escapeCSV(s.id)},${escapeCSV(customerName)},${escapeCSV(orderType)},${escapeCSV(displayMethod)},${amt.toFixed(2)},${cAmt.toFixed(2)},${gAmt.toFixed(2)},${escapeCSV(discountType)},${escapeCSV(pureItems)}\n`;
+          pureItems = pureItems.replace(/\(w\/.*?Discount\)/g, '');
+          pureItems.split(', ').forEach(part => {
+            const match = part.match(/(\d+)x (.+)/);
+            if (match) {
+              const qty = parseInt(match[1]);
+              const name = match[2].trim();
+              bItemCounts[name] = (bItemCounts[name] || 0) + qty;
+            }
+          });
         });
-      }
 
+        // SECTION HEADER
+        csv += `========================================================================================\n`;
+        csv += `📍 BRANCH REPORT: ${escapeCSV(bName.toUpperCase())}\n`;
+        csv += `========================================================================================\n`;
+        
+        // 1. BRANCH SUMMARY
+        csv += "\n[1] SALES & METRICS SUMMARY,,,,,,,,,,,\n";
+        csv += "Revenue (PHP),Transactions,Cash Received,GCash Received,Items Sold,Dine-In,Take-Out,Discounted Orders,Unique Customers\n";
+        csv += `${bTotalSales.toFixed(2)},${bSales.length},${bCash.toFixed(2)},${bGCash.toFixed(2)},${bItemsSold},${bDineIn},${bTakeout},${bDiscounted},${bUniqueCustomers.size}\n`;
+        csv += ",,,,,,,,,,,\n";
+
+        // 2. BRANCH SHIFT LOGS
+        csv += "[2] SHIFT & Z-READING LOGS,,,,,,,,,,,\n";
+        csv += "Cashier Name,Clock In,Clock Out,Starting Float,Cash Dropped (Skim),Expected Drawer,Actual Drawer,Discrepancy\n";
+        if (bShifts.length === 0) {
+          csv += "No shift records found for this period.,,,,,,,,\n";
+        } else {
+          bShifts.forEach(shift => {
+            const clockIn = new Date(shift.start_time).toLocaleString();
+            const clockOut = shift.end_time ? new Date(shift.end_time).toLocaleString() : 'STILL ACTIVE';
+            const exp = Number(shift.expected_cash || 0);
+            const act = Number(shift.actual_cash || 0);
+            const short = Number(shift.shortage || 0);
+            const drop = Number(shift.cash_drops || 0);
+            
+            let discrepancy = 'Perfect';
+            if (short < 0) discrepancy = `SHORT: ${Math.abs(short).toFixed(2)}`;
+            if (short > 0) discrepancy = `OVER: ${short.toFixed(2)}`;
+
+            csv += `${escapeCSV(shift.cashier_name)},${escapeCSV(clockIn)},${escapeCSV(clockOut)},${Number(shift.starting_cash || 0).toFixed(2)},${drop.toFixed(2)},${exp.toFixed(2)},${act.toFixed(2)},${escapeCSV(discrepancy)}\n`;
+          });
+        }
+        csv += ",,,,,,,,,,,\n";
+
+        // 3. BRANCH TOP PRODUCTS
+        csv += "[3] PRODUCT PERFORMANCE,,,,,,,,,,,\n";
+        csv += "Rank,Item Name,Quantity Sold,,,,,,,,\n";
+        const sortedItems = Object.entries(bItemCounts).sort((a, b) => b[1] - a[1]);
+        if (sortedItems.length === 0) {
+          csv += "-,No items sold in this period.,,,,,,,,,\n";
+        } else {
+          sortedItems.forEach(([name, qty], index) => {
+            csv += `${index + 1},${escapeCSV(name)},${qty},,,,,,,,\n`;
+          });
+        }
+        csv += ",,,,,,,,,,,\n";
+
+        // 4. BRANCH INVENTORY
+        csv += "[4] CURRENT INVENTORY AUDIT,,,,,,,,,,,\n";
+        csv += "Ingredient / Item Name,Current Stock Level,Unit,Status Warning,,,,,,,\n";
+        const sortedInv = [...bInventory].sort((a, b) => Number(a.stock_qty || 0) - Number(b.stock_qty || 0));
+        if (sortedInv.length === 0) {
+           csv += "No inventory data available.,,,,,,,,,,\n";
+        } else {
+          sortedInv.forEach(item => {
+            const stock = Number(item.stock_qty || 0);
+            let status = 'Healthy';
+            if (stock <= 0) status = 'OUT OF STOCK';
+            else if (stock <= 10) status = 'CRITICAL - RESTOCK NOW';
+            else if (stock <= 30) status = 'Low Stock';
+            csv += `${escapeCSV(item.name)},${stock},${escapeCSV(item.unit)},${escapeCSV(status)},,,,,,\n`;
+          });
+        }
+        csv += ",,,,,,,,,,,\n";
+
+        // 5. BRANCH MASTER LEDGER
+        csv += "[5] MASTER TRANSACTION LEDGER,,,,,,,,,,,\n";
+        csv += "Date,Time,Order ID,Customer Name,Order Type,Payment Method,Total (PHP),Cash Part (PHP),GCash Part (PHP),Discount,Items Breakdown\n";
+        if (bSales.length === 0) {
+          csv += "No transactions found for this period.,,,,,,,,,,\n";
+        } else {
+          const sortedBSales = [...bSales].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          sortedBSales.forEach(s => {
+            const dateObj = new Date(s.created_at);
+            const date = dateObj.toLocaleDateString();
+            const time = dateObj.toLocaleTimeString();
+            
+            let method = s.payment_method || 'Cash';
+            let displayMethod = method;
+            if (method === 'GCash') {
+                 const match = s.items_summary?.match(/\(Ref: (\d+)\)/);
+                 if (match) displayMethod = `GCash (Ref: ${match[1]})`;
+            }
+
+            let orderType = "Unknown";
+            let customerName = "Guest";
+            let discountType = "None";
+            let pureItems = s.items_summary || "No details";
+
+            const typeMatch = pureItems.match(/\[(.*?)\]/);
+            if (typeMatch) {
+              orderType = typeMatch[1];
+              pureItems = pureItems.replace(`[${orderType}] `, '');
+            }
+
+            const customerSplit = pureItems.split(' - ');
+            if (customerSplit.length > 1) {
+              customerName = customerSplit[0].replace(/\s*\(Ref:.*?\)/, '').trim(); 
+              pureItems = customerSplit.slice(1).join(' - ');
+            }
+
+            const discountMatch = pureItems.match(/\(w\/ (.*?) Discount\)/);
+            if (discountMatch) {
+              discountType = discountMatch[1];
+              pureItems = pureItems.replace(`(w/ ${discountType} Discount)`, '').trim();
+            }
+
+            const amt = Number(s.total_amount || 0);
+            let cAmt = Number(s.cash_amount || 0);
+            let gAmt = Number(s.gcash_amount || 0);
+            if (method === 'Cash' && cAmt === 0 && gAmt === 0) cAmt = amt;
+            if (method === 'GCash' && cAmt === 0 && gAmt === 0) gAmt = amt;
+
+            csv += `${escapeCSV(date)},${escapeCSV(time)},${escapeCSV(s.id)},${escapeCSV(customerName)},${escapeCSV(orderType)},${escapeCSV(displayMethod)},${amt.toFixed(2)},${cAmt.toFixed(2)},${gAmt.toFixed(2)},${escapeCSV(discountType)},${escapeCSV(pureItems)}\n`;
+          });
+        }
+        
+        csv += "\n\n"; // Padding before the next branch
+      });
+
+      // TRIGGER DOWNLOAD
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       const safeDate = new Date().toISOString().split('T')[0];
-      const safeBranch = branchName.replace(/\s+/g, '_');
-      link.download = `TallyBrew_GOD_REPORT_${safeBranch}_${timeFilter.replace(/\s+/g, '_')}_${safeDate}.csv`;
+      const safeBranch = branchNameLabel.replace(/\s+/g, '_');
+      link.download = `TallyBrew_Detailed_Report_${safeBranch}_${timeFilter.replace(/\s+/g, '_')}_${safeDate}.csv`;
       link.click();
 
     } catch (err) {
-      alert("Error generating God Report: " + err.message);
+      alert("Error generating Detailed Report: " + err.message);
     } finally {
       setIsExporting(false);
     }

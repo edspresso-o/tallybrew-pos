@@ -228,7 +228,9 @@ function App() {
 
   const saveOffline = (orderPackage) => { const pending = getOfflineQueue(); pending.push(orderPackage); localStorage.setItem('tallybrew_offline_queue', encryptData(pending)); setPendingSalesCount(pending.length); };
 
-  const handleNavigationRequest = (view) => { const role = activeCashier?.role || 'cashier'; if ((view === 'Dashboard' || view === 'Inventory' || view === 'Transactions') && role !== 'manager' && role !== 'admin') { setPendingAction({ type: 'navigate', payload: view }); setShowManagerAuth(true); } else { setCurrentView(view); } };
+  // --- THE FIX IS HERE: Added view === 'Settings' to the manager/admin check ---
+  const handleNavigationRequest = (view) => { const role = activeCashier?.role || 'cashier'; if ((view === 'Dashboard' || view === 'Inventory' || view === 'Transactions' || view === 'Settings') && role !== 'manager' && role !== 'admin') { setPendingAction({ type: 'navigate', payload: view }); setShowManagerAuth(true); } else { setCurrentView(view); } };
+  
   const requestDeleteProduct = (id) => { const role = activeCashier?.role || 'cashier'; if (role !== 'manager' && role !== 'admin') { setPendingAction({ type: 'delete', payload: id }); setShowManagerAuth(true); } else { showConfirm("Are you sure you want to delete this product? This action cannot be undone.", () => performDeleteProduct(id)); } };
   const requestAddDiscount = () => { const role = activeCashier?.role || 'cashier'; if (role !== 'manager' && role !== 'admin') { setPendingAction({ type: 'discount' }); setShowManagerAuth(true); } else { setIsDiscountOpen(true); } };
   const requestVoidSale = (sale) => { const role = activeCashier?.role || 'cashier'; if (role !== 'manager' && role !== 'admin') { setPendingAction({ type: 'void_sale', payload: sale }); setShowManagerAuth(true); } else { showConfirm(`Are you sure you want to VOID this ₱${Number(sale.total_amount).toFixed(2)} transaction? This will permanently delete the record.`, () => performVoidSale(sale)); } };
