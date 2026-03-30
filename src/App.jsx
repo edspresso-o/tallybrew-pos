@@ -235,18 +235,41 @@ function App() {
   const performVoidSale = async (sale) => { try { await supabase.from('sale_items').delete().eq('sale_id', sale.id); await supabase.from('sales').delete().eq('id', sale.id); showAlert("Transaction successfully voided.", "confirm"); fetchAllData(); } catch (err) { showAlert("Error voiding transaction: " + err.message, "error"); } };
   const performDeleteProduct = async (id) => { try { await supabase.from('products').delete().eq('id', id); fetchAllData(); } catch (error) { showAlert("Error deleting product: " + error.message, "error"); } };
 
+  /* ========================================= */
+  /* 🔒 SECURE MANAGER OVERRIDE FUNCTION       */
+  /* ========================================= */
   const executeManagerOverride = async () => {
     try {
-      const { data } = await supabase.from('profiles').select('*').eq('pin', managerPinInput).in('role', ['manager', 'admin']).limit(1);
-      if (data && data.length > 0) {
-        if (pendingAction.type === 'navigate') setCurrentView(pendingAction.payload);
-        else if (pendingAction.type === 'delete') performDeleteProduct(pendingAction.payload);
-        else if (pendingAction.type === 'discount') setIsDiscountOpen(true);
-        else if (pendingAction.type === 'close_register') prepareEndShift(); 
-        else if (pendingAction.type === 'void_sale') performVoidSale(pendingAction.payload); 
-        setShowManagerAuth(false); setPendingAction(null); setManagerPinInput("");
-      } else { showAlert("Incorrect PIN or you do not have Manager privileges!", "error"); setManagerPinInput(""); }
-    } catch (err) { showAlert("System Error connecting to database.", "error"); setManagerPinInput(""); }
+      // 1. Call the Supabase Bouncer directly. Pass the PIN and the Current Branch!
+      const { data, error } = await supabase.rpc('secure_manager_login', {
+        entered_pin: managerPinInput,
+        current_branch: effectiveBranch || 'unknown'
+      });
+
+      // 2. If Supabase says NO (Wrong PIN, wrong branch, or is a cashier)
+      if (error || !data) {
+        setShowManagerAuth(false); // <--- THIS FIXES THE UI BUG! Closes the PIN modal first.
+        showAlert("Action Denied: Incorrect PIN or you do not have Manager privileges for this branch.", "error");
+        setManagerPinInput("");
+        return;
+      }
+
+      // 3. IF SUPABASE SAYS YES: Execute the action!
+      if (pendingAction.type === 'navigate') setCurrentView(pendingAction.payload);
+      else if (pendingAction.type === 'delete') performDeleteProduct(pendingAction.payload);
+      else if (pendingAction.type === 'discount') setIsDiscountOpen(true);
+      else if (pendingAction.type === 'close_register') prepareEndShift(); 
+      else if (pendingAction.type === 'void_sale') performVoidSale(pendingAction.payload); 
+      
+      setShowManagerAuth(false); 
+      setPendingAction(null); 
+      setManagerPinInput("");
+
+    } catch (err) { 
+      setShowManagerAuth(false); // Failsafe UI close
+      showAlert("System Error connecting to database.", "error"); 
+      setManagerPinInput(""); 
+    }
   };
 
   const addProduct = async (formData, selectedFile) => {

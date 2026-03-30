@@ -1,8 +1,13 @@
 import React, { useState, useMemo } from 'react';
+import ManagerAuthModal from './modals/ManagerAuthModal'; // 🔒 IMPORT THE MODAL
 
-export default function Transactions({ sales = [], onVoidSale, activeCashier }) {
+export default function Transactions({ sales = [], onVoidSale, activeCashier, branchId }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMethod, setFilterMethod] = useState('All');
+
+  // 🔒 NEW SECURITY STATES
+  const [showManagerAuth, setShowManagerAuth] = useState(false);
+  const [saleToVoid, setSaleToVoid] = useState(null); // Remembers which sale they want to void
 
   // SAFE ARRAY CHECK: Make sure 'sales' actually exists before sorting
   const safeSales = Array.isArray(sales) ? sales : [];
@@ -53,6 +58,21 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier }) 
   return (
     <div className="transactions-page" style={{ padding: '30px', paddingTop: '50px', width: '100%', boxSizing: 'border-box', overflowY: 'auto', height: '100%', backgroundColor: '#f9fafb' }}>
       
+      {/* 🔒 DROP THE MODAL AT THE TOP OF THE PAGE */}
+      <ManagerAuthModal 
+        showManagerAuth={showManagerAuth} 
+        setShowManagerAuth={setShowManagerAuth} 
+        currentBranchId={branchId} // Passes the branch ID to block outside managers
+        onSuccess={(managerData) => {
+          // THIS CODE ONLY RUNS IF THE SUPABASE BOUNCER SAYS "YES"
+          console.log("Void Authorized by Manager:", managerData.username);
+          if (saleToVoid) {
+            onVoidSale(saleToVoid); // Execute the actual void!
+            setSaleToVoid(null); // Clear the memory
+          }
+        }} 
+      />
+
       <style>{`
         @keyframes slideUpFade { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         .stagger-card { opacity: 0; animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -196,8 +216,12 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier }) 
                   </div>
                 </div>
 
+                {/* 🔒 CHANGED VOID BUTTON LOGIC HERE */}
                 <button 
-                  onClick={() => onVoidSale(sale)}
+                  onClick={() => {
+                    setSaleToVoid(sale); // Remember which sale we want to void
+                    setShowManagerAuth(true); // Open the vault!
+                  }}
                   style={{ 
                     backgroundColor: '#fff', 
                     color: '#ef4444', 
