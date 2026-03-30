@@ -4,8 +4,13 @@ const SmoothMenuImage = ({ src, alt, available }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
 
+  // FIX 1: Added a light gray box with "No Image" text instead of a blank white space
   if (!src || hasError) {
-    return <div style={{ width: '100%', height: '100%', backgroundColor: '#ffffff' }}></div>;
+    return (
+      <div style={{ width: '100%', height: '100%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}>
+         <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 'bold' }}>No Image</span>
+      </div>
+    );
   }
 
   return (
@@ -84,10 +89,6 @@ export default function Menu({
   return (
     <div className="main-menu" style={{ padding: '20px', flex: 1, width: '100%', boxSizing: 'border-box', overflowY: 'auto' }}>
       
-      {/* UPDATED HEADER: 
-        Added marginTop: '50px' here to push it down below the mobile button.
-        Removed the paddingLeft from the title container.
-      */}
       <div className="menu-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '15px', marginBottom: '25px', marginTop: '50px' }}>
         
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
@@ -152,7 +153,7 @@ export default function Menu({
                 opacity: (available || isDeleteMode) ? 1 : 0.6,
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'space-between',
+                height: '100%', /* FIX 2: Ensures all cards stretch to the same height */
                 pointerEvents: 'auto' 
               }}
               onMouseDown={(e) => (!isDeleteMode && available) && (e.currentTarget.style.transform = 'scale(0.96)')}
@@ -170,11 +171,12 @@ export default function Menu({
                 <div style={{ position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ef4444', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '20px', boxShadow: '0 4px 10px rgba(239,68,68,0.4)', zIndex: 10 }}>−</div>
               )}
 
-              <div className="product-image" style={{ width: '100%', height: '80px', backgroundColor: '#ffffff', borderRadius: '12px', marginBottom: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="product-image" style={{ width: '100%', height: '80px', backgroundColor: '#ffffff', borderRadius: '12px', marginBottom: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <SmoothMenuImage src={item.image_url} alt={item.name} available={available} />
               </div>
               
-              <div>
+              {/* FIX 3: Flex-grow wrapper pushes the price perfectly to the bottom */}
+              <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
                 <div className="product-name" style={{ fontSize: '13px', fontWeight: '800', color: '#111', marginBottom: '4px', lineHeight: '1.2' }}>{item.name}</div>
                 <div className="product-price" style={{ fontSize: '14px', fontWeight: '900', color: '#b85e2b' }}>₱ {item.price.toFixed(2)}</div>
               </div>
