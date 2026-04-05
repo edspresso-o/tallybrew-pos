@@ -167,9 +167,10 @@ export default function CashierLock({ onUnlock }) {
             src="/images/TallyBrewPosLogo.png" 
             alt="TallyBrew Logo" 
             style={{ 
-              maxWidth: '180px', 
+              maxWidth: '450px', 
               width: '100%', 
               height: 'auto', 
+              marginBottom: '0px',
               filter: 'drop-shadow(0 15px 25px rgba(59,34,19,0.15))',
               animation: 'fadeInDown 0.6s ease-out'
             }} 
