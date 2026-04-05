@@ -164,7 +164,7 @@ export default function CashierLock({ onUnlock }) {
       return (
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: '15px' }}>
           <img 
-            src="/images/TallyBrewAppLogo.png" 
+            src="/images/TallyBrewPosLogo.png" 
             alt="TallyBrew Logo" 
             style={{ 
               maxWidth: '180px', 
