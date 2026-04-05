@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/tallybrew-pos/', // <-- THIS IS THE CRITICAL LINE FOR GITHUB PAGES!
+  base: '/', // <-- THIS IS THE CRITICAL LINE FOR GITHUB PAGES!
   plugins: [
     react(),
     VitePWA({
