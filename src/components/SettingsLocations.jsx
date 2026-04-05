@@ -110,7 +110,7 @@ export default function SettingsLocations() {
             <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: '#FDFBF7', border: '1px solid #E6D0A9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B56124" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
             </div>
-            <h2 style={{ fontSize: '22px', fontWeight: '900', color: '#3B2213', margin: 0, letterSpacing: '-0.5px' }}>Expand the Empire</h2>
+            <h2 style={{ fontSize: '22px', fontWeight: '900', color: '#3B2213', margin: 0, letterSpacing: '-0.5px' }}>Add New Branch</h2>
           </div>
           <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '25px', fontWeight: '500', paddingLeft: '52px' }}>Register a new store location to the database.</p>
           
