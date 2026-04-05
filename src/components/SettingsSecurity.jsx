@@ -8,19 +8,29 @@ export default function SettingsSecurity({ activeCashier }) {
 
   const handleUpdatePin = async (e) => {
     e.preventDefault();
+    
     if (newPin.length !== 6) {
       setIsError(true);
       setStatusMsg("PIN must be exactly 6 digits.");
       return;
     }
+    
     try {
-      const { error } = await supabase.from('profiles').update({ pin: newPin }).eq('username', activeCashier.username);
+      // THE FIX: Explicitly target the unique 'id' in the 'profiles' table
+      const { error } = await supabase
+        .from('profiles') 
+        .update({ pin: newPin })
+        .eq('id', activeCashier.id); 
+
       if (error) throw error;
+      
       setIsError(false);
       setStatusMsg("Success! Your personal PIN has been updated.");
       setNewPin('');
       setTimeout(() => setStatusMsg(''), 4000);
+      
     } catch (err) {
+      console.error("PIN Update Error:", err);
       setIsError(true);
       setStatusMsg("Database Error: Could not update PIN.");
     }

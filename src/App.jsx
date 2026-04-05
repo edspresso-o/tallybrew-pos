@@ -242,21 +242,36 @@ function App() {
   /* ========================================= */
   const executeManagerOverride = async () => {
     try {
-      // 1. Call the Supabase Bouncer directly. Pass the PIN and the Current Branch!
+      // 1. CLEAN THE INPUTS (Crucial for avoiding silent database rejections)
+      const cleanPin = String(managerPinInput).trim();
+      const cleanBranch = effectiveBranch ? String(effectiveBranch).trim() : null;
+
+      console.log("DEBUG: Attempting override. PIN:", cleanPin, "Branch:", cleanBranch);
+
+      // 2. Call the Supabase Bouncer
       const { data, error } = await supabase.rpc('secure_manager_login', {
-        entered_pin: managerPinInput,
-        current_branch: effectiveBranch || 'unknown'
+        entered_pin: cleanPin,
+        current_branch: cleanBranch
       });
 
-      // 2. If Supabase says NO (Wrong PIN, wrong branch, or is a cashier)
-      if (error || !data) {
-        setShowManagerAuth(false); // <--- THIS FIXES THE UI BUG! Closes the PIN modal first.
+      // 3. Catch actual Database/Network Errors
+      if (error) {
+        console.error("Supabase RPC Error:", error);
+        setShowManagerAuth(false); 
+        showAlert(`Database Error: ${error.message}`, "error");
+        setManagerPinInput("");
+        return;
+      }
+
+      // 4. If Supabase says NO (Wrong PIN or no permission)
+      if (data === false) {
+        setShowManagerAuth(false); 
         showAlert("Action Denied: Incorrect PIN or you do not have Manager privileges for this branch.", "error");
         setManagerPinInput("");
         return;
       }
 
-      // 3. IF SUPABASE SAYS YES: Execute the action!
+      // 5. IF SUPABASE SAYS YES: Execute the action!
       if (pendingAction.type === 'navigate') setCurrentView(pendingAction.payload);
       else if (pendingAction.type === 'delete') performDeleteProduct(pendingAction.payload);
       else if (pendingAction.type === 'discount') setIsDiscountOpen(true);
@@ -268,12 +283,11 @@ function App() {
       setManagerPinInput("");
 
     } catch (err) { 
-      setShowManagerAuth(false); // Failsafe UI close
+      setShowManagerAuth(false); 
       showAlert("System Error connecting to database.", "error"); 
       setManagerPinInput(""); 
     }
   };
-
   const addProduct = async (formData, selectedFile) => {
     try {
       let image_url = '';
