@@ -7,8 +7,10 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
   const [orderType, setOrderType] = useState('dine-in');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [showReceipt, setShowReceipt] = useState(false);
-  const [orderId] = useState(Math.floor(100000 + Math.random() * 900000)); 
   
+  const [isProcessing, setIsProcessing] = useState(false); 
+  
+  const [orderId] = useState(Math.floor(100000 + Math.random() * 900000)); 
   const [gcashReference, setGcashReference] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState(null);
   const [branchName, setBranchName] = useState('');
@@ -33,6 +35,9 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
 
   const totalAmount = Number(total);
   const change = parseFloat(receivedAmount) - totalAmount;
+
+  const vatableSales = totalAmount / 1.12;
+  const vatAmount = totalAmount - vatableSales;
 
   const isPaid = paymentMethod === 'GCash' 
     ? gcashReference.length >= 4 
@@ -69,6 +74,9 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
   };
 
   const handlePrintAndSave = () => {
+    if (isProcessing) return; 
+    setIsProcessing(true); 
+
     const receiptHTML = document.getElementById('receipt-core').innerHTML;
     const printWindow = window.open('', '', 'height=800,width=400');
     
@@ -85,18 +93,22 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
               margin: 0; 
               padding: 5mm; 
               font-family: 'Inter', sans-serif; 
-              color: #000; 
-              background: #fff;
               width: 76mm; 
               font-size: 12px;
             }
+            
+            * {
+              color: #000 !important;
+              border-color: #000 !important;
+              background: transparent !important;
+            }
+
             .receipt-container { width: 100%; }
             .cut-line { 
               margin: 8mm 0; 
-              border-bottom: 1px dashed #000; 
+              border-bottom: 1px dashed #000 !important; 
               text-align: center; 
               font-size: 10px;
-              color: #000;
             }
           </style>
         </head>
@@ -116,7 +128,11 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
       </html>
     `);
     printWindow.document.close();
-    handleFinishOrder();
+    
+    // THE FIX: Extended to exactly 2 seconds (2000ms) to let the mechanical print animation finish perfectly.
+    setTimeout(() => {
+      handleFinishOrder();
+    }, 2000);
   };
 
   return (
@@ -129,17 +145,34 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
         .hide-arrows { -moz-appearance: textfield; }
         @keyframes popIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         
+        /* THE FIX: Realistic Thermal Printer "Step" Animation */
+        @keyframes thermalPrintAndTear {
+          0% { transform: translateY(0); opacity: 1; }
+          10% { transform: translateY(-15px); opacity: 1; }  /* Step 1 */
+          15% { transform: translateY(-15px); opacity: 1; }  /* Pause */
+          30% { transform: translateY(-40px); opacity: 1; }  /* Step 2 */
+          35% { transform: translateY(-40px); opacity: 1; }  /* Pause */
+          50% { transform: translateY(-70px); opacity: 1; }  /* Step 3 */
+          55% { transform: translateY(-70px); opacity: 1; }  /* Pause */
+          70% { transform: translateY(-110px); opacity: 1; } /* Final step out */
+          80% { transform: translateY(-100px) scale(0.98); opacity: 1; } /* Tension/dip for tear */
+          100% { transform: translateY(-400px) scale(0.9); opacity: 0; } /* Swift tear off and away */
+        }
+        .receipt-printing {
+          animation: thermalPrintAndTear 2s cubic-bezier(0.25, 0.8, 0.25, 1) forwards !important;
+          pointer-events: none;
+        }
+        
         .quick-cash-btn { flex: 1; padding: 10px 4px; border-radius: 8px; background: #E6D0A9; border: none; color: #3B2213; font-weight: 800; font-size: 12px; cursor: pointer; transition: 0.2s; white-space: nowrap; }
         .quick-cash-btn:hover { background: #D5B888; }
         .quick-cash-btn:active { transform: scale(0.95); }
 
-        /* Custom Scrollbar to hide it visually but keep functionality */
         .mobile-scroll::-webkit-scrollbar { display: none; }
         .mobile-scroll { -ms-overflow-style: none; scrollbar-width: none; }
         
         .receipt-scroll::-webkit-scrollbar { width: 6px; }
-        .receipt-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
-        .receipt-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+        .receipt-scroll::-webkit-scrollbar-track { background: #FDFBF7; border-radius: 10px; }
+        .receipt-scroll::-webkit-scrollbar-thumb { background: #E6D0A9; border-radius: 10px; }
       `}</style>
       
       {!showReceipt ? (
@@ -224,8 +257,8 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
               </div>
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', padding: '0 5px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Change Due</span>
-                <span style={{ fontSize: '18px', fontWeight: '900', color: receivedAmount && change >= 0 ? '#10b981' : '#9ca3af' }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: '#B56124', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Change Due</span>
+                <span style={{ fontSize: '18px', fontWeight: '900', color: receivedAmount && change >= 0 ? '#10b981' : '#B56124' }}>
                   {receivedAmount ? (change >= 0 ? `₱${change.toFixed(2)}` : 'Insufficient') : '₱0.00'}
                 </span>
               </div>
@@ -268,7 +301,7 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
           <button 
             onClick={handleProcessPayment} 
             disabled={!isPaid} 
-            style={{ width: '100%', padding: '16px', borderRadius: '12px', border: 'none', background: isPaid ? (paymentMethod === 'GCash' ? '#2563eb' : '#3B2213') : '#e5e7eb', color: isPaid ? '#fff' : '#9ca3af', fontSize: '15px', fontWeight: '900', cursor: isPaid ? 'pointer' : 'not-allowed', transition: 'all 0.2s', boxShadow: isPaid ? (paymentMethod === 'GCash' ? '0 8px 20px rgba(37,99,235,0.3)' : '0 8px 20px rgba(59,34,19,0.3)') : 'none', textTransform: 'uppercase', letterSpacing: '1px' }}
+            style={{ width: '100%', padding: '16px', borderRadius: '12px', border: 'none', background: isPaid ? (paymentMethod === 'GCash' ? '#2563eb' : '#3B2213') : '#E6D0A9', color: isPaid ? '#fff' : '#B56124', fontSize: '15px', fontWeight: '900', cursor: isPaid ? 'pointer' : 'not-allowed', transition: 'all 0.2s', boxShadow: isPaid ? (paymentMethod === 'GCash' ? '0 8px 20px rgba(37,99,235,0.3)' : '0 8px 20px rgba(59,34,19,0.3)') : 'none', textTransform: 'uppercase', letterSpacing: '1px' }}
           >
             Confirm Payment
           </button>
@@ -277,107 +310,148 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
         
       ) : (
         
-        // --- ENHANCED DUAL RECEIPT PREVIEW ---
+        // --- ENHANCED DUAL RECEIPT PREVIEW (MATCHING TALLYBREW COLORS) ---
         <div style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '380px', maxHeight: '90vh', animation: 'popIn 0.3s' }}>
           
-          <div className="receipt-scroll" style={{ backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', overflowY: 'auto', marginBottom: '15px' }}>
-            <div id="receipt-core" style={{ padding: '30px 25px', background: '#fff', color: '#111', fontFamily: "'Inter', sans-serif" }}>
+          <div className={`receipt-scroll ${isProcessing ? 'receipt-printing' : ''}`} style={{ backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(59,34,19,0.6)', overflowY: 'auto', marginBottom: '15px' }}>
+            <div id="receipt-core" style={{ padding: '30px 25px', background: '#fff', color: '#3B2213', fontFamily: "'Inter', sans-serif" }}>
               
               {['STORE COPY', 'CUSTOMER COPY'].map((copyType, index) => (
                 <div key={copyType}>
                   
                   <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                    <div style={{ fontWeight: '800', fontSize: '11px', color: '#6b7280', letterSpacing: '1px', marginBottom: '15px' }}>*** {copyType} ***</div>
+                    <div style={{ fontWeight: '900', fontSize: '12px', color: '#B56124', letterSpacing: '1px', marginBottom: '15px' }}>*** {copyType} ***</div>
                     
                     <img 
-        src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
-        alt="TallyBrew Logo" 
-        style={{ width: '100%', maxWidth: '200px', maxHeight: '150px', objectFit: 'contain', marginBottom: '20px' }} 
-      />
+                      src={`${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png`} 
+                      alt="TallyBrew Logo" 
+                      style={{ width: '100%', maxWidth: '200px', maxHeight: '150px', objectFit: 'contain', marginBottom: '15px' }} 
+                    />
                     
-                    <p style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    <p style={{ margin: '0 0 5px 0', fontSize: '14px', fontWeight: '900', color: '#3B2213', textTransform: 'uppercase', letterSpacing: '1px' }}>
                       {branchName || 'Main Branch'}
                     </p>
+                    <p style={{ margin: '0 0 15px 0', fontSize: '11px', fontWeight: '600', color: '#B56124', lineHeight: '1.4' }}>
+                      San Juan, Apalit<br />
+                      Pampanga, Philippines<br />
+                      VAT REG TIN: 000-000-000-000
+                    </p>
 
-                    <div style={{ fontSize: '12px', color: '#4b5563', fontWeight: '600', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '12px', color: '#B56124', fontWeight: '700', marginBottom: '4px' }}>
                       {new Date().toLocaleDateString()} &nbsp;|&nbsp; {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </div>
-                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#111' }}>
-                      Order #: TB-{orderId}
+                    <div style={{ fontSize: '12px', fontWeight: '900', color: '#3B2213' }}>
+                      Customer #: TB-{orderId}
                     </div>
                   </div>
 
-                  <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '10px', marginBottom: '20px', border: '1px dashed #d1d5db' }}>
+                  <div style={{ background: '#FDFBF7', borderRadius: '8px', padding: '10px', marginBottom: '20px', border: '1px dashed #E6D0A9' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '800', marginBottom: '4px' }}>
-                      <span style={{ color: '#6b7280' }}>Type:</span>
-                      <span style={{ color: '#B56124', textTransform: 'uppercase' }}>{orderType === 'dine-in' ? 'DINE IN' : 'TAKE OUT'}</span>
+                      <span style={{ color: '#B56124' }}>Service Type:</span>
+                      <span style={{ color: '#3B2213', textTransform: 'uppercase' }}>{orderType === 'dine-in' ? 'DINE IN' : 'TAKE OUT'}</span>
                     </div>
                     {customerName && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '800' }}>
-                        <span style={{ color: '#6b7280' }}>Customer:</span>
-                        <span>{customerName}</span>
+                        <span style={{ color: '#B56124' }}>Customer:</span>
+                        <span style={{ color: '#3B2213' }}>{customerName}</span>
                       </div>
                     )}
                   </div>
 
-                  <div style={{ borderTop: '2px solid #111', borderBottom: '2px solid #111', padding: '12px 0', marginBottom: '15px' }}>
+                  <div style={{ borderTop: '2px solid #3B2213', borderBottom: '2px solid #3B2213', padding: '12px 0', marginBottom: '15px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '10px', fontWeight: '900', color: '#B56124' }}>
+                      <span>QTY / ITEM</span>
+                      <span>AMOUNT</span>
+                    </div>
                     {cart.map((item, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', fontWeight: '700' }}>
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', fontWeight: '700', color: '#3B2213' }}>
                         <span style={{ flex: 1, paddingRight: '15px', lineHeight: '1.4' }}>{item.qty}x {item.name}</span>
                         <span>₱{(item.price * item.qty).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
 
-                  <div style={{ borderBottom: '1px dashed #d1d5db', paddingBottom: '12px', marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '600', color: '#4b5563', marginBottom: '6px' }}>
+                  <div style={{ borderBottom: '1px dashed #E6D0A9', paddingBottom: '12px', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', color: '#B56124', marginBottom: '6px' }}>
                       <span>Subtotal</span>
                       <span>₱{cart.reduce((s, i) => s + (i.price * i.qty), 0).toFixed(2)}</span>
                     </div>
                     {discount.rate > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', color: '#dc2626', marginBottom: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '800', color: '#dc2626', marginBottom: '6px' }}>
                         <span>Discount ({discount.label})</span>
                         <span>- ₱{(cart.reduce((s, i) => s + (i.price * i.qty), 0) * discount.rate).toFixed(2)}</span>
                       </div>
                     )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '20px', fontWeight: '900', color: '#111' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '20px', fontWeight: '900', color: '#3B2213' }}>
                       <span>TOTAL</span>
                       <span>₱{totalAmount.toFixed(2)}</span>
                     </div>
                   </div>
 
                   <div style={{ paddingBottom: '15px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '600', color: '#4b5563', marginBottom: '4px' }}>
-                      <span>Paid via {paymentMethod}</span>
-                      <span>₱{paymentMethod === 'GCash' ? totalAmount.toFixed(2) : parseFloat(receivedAmount).toFixed(2)}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', color: '#B56124', marginBottom: '4px' }}>
+                      <span>Payment Method:</span>
+                      <span style={{ fontWeight: '900', color: '#3B2213' }}>{paymentMethod}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', color: '#B56124', marginBottom: '4px' }}>
+                      <span>Amount Tendered:</span>
+                      <span style={{ color: '#3B2213', fontWeight: '800' }}>₱{paymentMethod === 'GCash' ? totalAmount.toFixed(2) : parseFloat(receivedAmount).toFixed(2)}</span>
                     </div>
                     
                     {paymentMethod === 'Cash' && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '900', fontSize: '13px', color: '#111' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '900', fontSize: '13px', color: '#3B2213', marginTop: '8px' }}>
                         <span>Change</span>
                         <span>₱{change.toFixed(2)}</span>
                       </div>
                     )}
                     
                     {paymentMethod === 'GCash' && gcashReference && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', color: '#111', marginTop: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '800', color: '#3B2213', marginTop: '8px' }}>
                         <span>Ref No.</span>
                         <span>{gcashReference}</span>
                       </div>
                     )}
                   </div>
+
+                  <div style={{ padding: '12px 0', borderTop: '1px dashed #E6D0A9', borderBottom: '1px dashed #E6D0A9', marginBottom: '15px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '700', color: '#B56124', marginBottom: '4px' }}>
+                      <span>VATable Sales</span>
+                      <span>₱{vatableSales.toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '700', color: '#B56124', marginBottom: '4px' }}>
+                      <span>VAT Amount (12%)</span>
+                      <span>₱{vatAmount.toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '700', color: '#B56124' }}>
+                      <span>VAT-Exempt Sales</span>
+                      <span>₱0.00</span>
+                    </div>
+                  </div>
                   
                   {index === 0 && (
-                    <div className="cut-line" style={{ margin: '25px 0', borderBottom: '1px dashed #9ca3af', position: 'relative', textAlign: 'center' }}>
-                      <span style={{ position: 'absolute', top: '-8px', left: '50%', transform: 'translateX(-50%)', background: '#fff', padding: '0 10px', fontSize: '10px', fontWeight: '800', color: '#9ca3af', letterSpacing: '2px' }}>
+                    <div className="cut-line" style={{ margin: '25px 0', borderBottom: '1px dashed #B56124', position: 'relative', textAlign: 'center' }}>
+                      <span style={{ position: 'absolute', top: '-8px', left: '50%', transform: 'translateX(-50%)', background: '#fff', padding: '0 10px', fontSize: '10px', fontWeight: '900', color: '#B56124', letterSpacing: '2px' }}>
                         CUT HERE 
                       </span>
                     </div>
                   )}
 
                   {index === 1 && (
-                     <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', fontWeight: '600', color: '#6b7280' }}>
+                     <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', fontWeight: '800', color: '#B56124' }}>
                        Thank you for visiting!<br/>See you again soon.
+                       
+                       <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #E6D0A9', fontSize: '10px', color: '#B56124', lineHeight: '1.5' }}>
+                         <b style={{ color: '#3B2213', fontSize: '11px' }}>TallyBrew POS System</b><br />
+                         Developed by:<br />
+                         SAPNU, Princess Iyah M.<br />
+                         Dizon, Edward Arce<br />
+                         Magcalas, Kathleen Rose V.<br />
+                         Juico, Precious Elaine Q.<br />
+                         Sermenio, Tyrone Jay D.<br />
+                         <br />
+                         <span style={{ fontWeight: '800', color: '#3B2213' }}>Bachelor of Science in Computer Science 3A</span><br />
+                         Software Engineering 2
+                       </div>
                      </div>
                   )}
 
@@ -387,11 +461,26 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
             </div>
           </div>
 
+          {/* THE FIX: Button text changes to match the mechanical animation vibe! */}
           <button 
             onClick={handlePrintAndSave} 
-            style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: '#3B2213', color: '#FDFBF7', fontSize: '15px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 20px rgba(59, 34, 19, 0.5)', transition: 'all 0.2s', letterSpacing: '0.5px' }}
+            disabled={isProcessing}
+            style={{ 
+              width: '100%', 
+              padding: '16px', 
+              borderRadius: '16px', 
+              border: 'none', 
+              background: isProcessing ? '#E6D0A9' : '#3B2213', 
+              color: isProcessing ? '#B56124' : '#FDFBF7', 
+              fontSize: '15px', 
+              fontWeight: '900', 
+              cursor: isProcessing ? 'not-allowed' : 'pointer', 
+              boxShadow: isProcessing ? 'none' : '0 8px 20px rgba(59, 34, 19, 0.5)', 
+              transition: 'all 0.2s', 
+              letterSpacing: '0.5px' 
+            }}
           >
-            Done & Save Order
+            {isProcessing ? 'Printing Receipt...' : 'Done & Save Order'}
           </button>
 
         </div>
