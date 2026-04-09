@@ -174,6 +174,7 @@ export default function SettingsShift({ activeCashier, activeShift, onUpdateShif
             Record Cash Drop (Skim)
           </button>
           
+          {/* THE FIX IS HERE ON THE LINE BELOW */}
           <button 
             className="action-btn"
             onClick={onPrepareEndShift}
