@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-const SECRET_KEY = "TallyBrew@2026_SecureVault_X99!";
+const SECRET_KEY = import.meta.env.VITE_OFFLINE_VAULT_KEY || "Fallback_Key_Do_Not_Use_In_Prod";
 
 const encryptData = (data) => {
   const text = JSON.stringify(data); let result = '';

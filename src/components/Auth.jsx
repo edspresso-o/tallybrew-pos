@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-// ==========================================
-// 1. SECURE OFFLINE ENCRYPTION (Environment Variable)
-// ==========================================
+
 const SECRET_KEY = import.meta.env.VITE_OFFLINE_VAULT_KEY || "Fallback_Key_Do_Not_Use_In_Prod";
 
 const encryptData = (data) => {
