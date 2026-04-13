@@ -12,7 +12,7 @@ const SmoothMenuImage = ({ src, alt, available }) => {
     let isMounted = true;
 
     const loadAndCacheImage = async () => {
-      // Fallback if the browser doesn't support local caching
+     
       if (!('caches' in window)) {
         if (isMounted) setCachedSrc(src);
         return;
