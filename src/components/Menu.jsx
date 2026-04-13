@@ -1,10 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
+
+// THE FIX: Advanced Offline Image Caching & Instant Loading
 const SmoothMenuImage = ({ src, alt, available }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [cachedSrc, setCachedSrc] = useState(null);
 
-  // FIX 1: Added a light gray box with "No Image" text instead of a blank white space
+  useEffect(() => {
+    if (!src) return;
+
+    let isMounted = true;
+
+    const loadAndCacheImage = async () => {
+      // Fallback if the browser doesn't support local caching
+      if (!('caches' in window)) {
+        if (isMounted) setCachedSrc(src);
+        return;
+      }
+
+      try {
+        // Open our secure offline image vault
+        const cache = await caches.open('tallybrew-menu-images');
+        const cachedResponse = await cache.match(src);
+
+        if (cachedResponse) {
+          // 🟢 SUCCESS: Found the actual image file locally! Load it instantly.
+          const blob = await cachedResponse.blob();
+          if (isMounted) setCachedSrc(URL.createObjectURL(blob));
+        } else if (navigator.onLine) {
+          // 🌐 ONLINE: Download the image and save a copy to the local vault.
+          const response = await fetch(src);
+          if (response.ok) {
+            await cache.put(src, response.clone());
+            const blob = await response.blob();
+            if (isMounted) setCachedSrc(URL.createObjectURL(blob));
+          } else {
+            if (isMounted) setCachedSrc(src);
+          }
+        } else {
+          // 🔴 OFFLINE & NOT CACHED YET: Safe fallback.
+          if (isMounted) setCachedSrc(src); 
+        }
+      } catch (err) {
+        if (isMounted) setCachedSrc(src);
+      }
+    };
+
+    loadAndCacheImage();
+
+    return () => {
+      isMounted = false; // Cleanup to prevent memory leaks
+    };
+  }, [src]);
+
   if (!src || hasError) {
     return (
       <div style={{ width: '100%', height: '100%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}>
@@ -13,29 +61,26 @@ const SmoothMenuImage = ({ src, alt, available }) => {
     );
   }
 
+  // Show a tiny blank placeholder for a millisecond while pulling from the vault
+  if (!cachedSrc) {
+     return <div style={{ width: '100%', height: '100%', backgroundColor: '#ffffff', borderRadius: '8px' }}></div>;
+  }
+
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#ffffff', overflow: 'hidden' }}>
-      {!isLoaded && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#ffffff' }}></div>
-      )}
-      
-      <img
-        src={src}
-        alt={alt}
-        onLoad={() => setIsLoaded(true)}
-        onError={() => setHasError(true)}
-        style={{ 
-          width: '100%', 
-          height: '100%', 
-          objectFit: 'contain', 
-          padding: '5px', 
-          boxSizing: 'border-box',
-          opacity: isLoaded ? 1 : 0, 
-          transition: 'opacity 0.4s ease-in-out',
-          filter: available ? 'none' : 'grayscale(100%)' 
-        }}
-      />
-    </div>
+    <img
+      src={cachedSrc}
+      alt={alt}
+      onError={() => setHasError(true)}
+      style={{ 
+        width: '100%', 
+        height: '100%', 
+        objectFit: 'contain', 
+        padding: '5px', 
+        boxSizing: 'border-box',
+        filter: available ? 'none' : 'grayscale(100%)',
+        backgroundColor: '#ffffff'
+      }}
+    />
   );
 };
 
@@ -87,44 +132,47 @@ export default function Menu({
   };
 
   return (
-    <div className="main-menu" style={{ padding: '20px', flex: 1, width: '100%', boxSizing: 'border-box', overflowY: 'auto' }}>
+    <div className="main-menu" style={{ padding: '0 20px 20px 20px', flex: 1, width: '100%', boxSizing: 'border-box', overflowY: 'auto' }}>
       
-      <div className="menu-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '15px', marginBottom: '25px', marginTop: '50px' }}>
+      <div style={{ position: 'sticky', top: 0, backgroundColor: '#f3f4f6', zIndex: 10, paddingTop: '20px', paddingBottom: '10px' }}>
         
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: '900', margin: 0, color: '#000', letterSpacing: '-1px' }}>Menu</h1>
-          <span 
-            onClick={onManageClick}
-            style={{ fontSize: '18px', color: '#9ca3af', fontWeight: '800', cursor: 'pointer', transition: 'color 0.2s', letterSpacing: '-0.5px' }}
-            onMouseOver={(e) => e.target.style.color = '#6b7280'}
-            onMouseOut={(e) => e.target.style.color = '#9ca3af'}
+        <div className="menu-header" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '15px', marginBottom: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <h1 style={{ fontSize: '32px', fontWeight: '900', margin: 0, color: '#000', letterSpacing: '-1px' }}>Menu</h1>
+            <span 
+              onClick={onManageClick}
+              style={{ fontSize: '18px', color: '#9ca3af', fontWeight: '800', cursor: 'pointer', transition: 'color 0.2s', letterSpacing: '-0.5px' }}
+              onMouseOver={(e) => e.target.style.color = '#6b7280'}
+              onMouseOut={(e) => e.target.style.color = '#9ca3af'}
+            >
+              Manage
+            </span>
+          </div>
+
+          <button
+            onClick={() => setIsDeleteMode(!isDeleteMode)}
+            style={{ padding: '8px 14px', backgroundColor: isDeleteMode ? '#ef4444' : '#fff', color: isDeleteMode ? '#fff' : '#ef4444', border: '2px solid #ef4444', borderRadius: '10px', fontWeight: '800', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: isDeleteMode ? '0 4px 10px rgba(239,68,68,0.3)' : 'none', whiteSpace: 'nowrap' }}
           >
-            Manage
-          </span>
+            {isDeleteMode ? 'Done Removing' : 'Remove Items'}
+          </button>
         </div>
 
-        <button
-          onClick={() => setIsDeleteMode(!isDeleteMode)}
-          style={{ padding: '10px 16px', backgroundColor: isDeleteMode ? '#ef4444' : '#fff', color: isDeleteMode ? '#fff' : '#ef4444', border: '2px solid #ef4444', borderRadius: '10px', fontWeight: '800', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: isDeleteMode ? '0 4px 10px rgba(239,68,68,0.3)' : 'none', whiteSpace: 'nowrap' }}
-        >
-          {isDeleteMode ? 'Done Removing' : 'Remove Items'}
-        </button>
+        <div className="category-pills" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '5px', WebkitOverflowScrolling: 'touch' }}>
+          {categories.map(cat => (
+            <button 
+              key={cat} 
+              className={`category-pill ${activeCategory === cat ? 'active' : ''}`}
+              onClick={() => setActiveCategory(cat)}
+              style={{ padding: '8px 16px', borderRadius: '20px', border: activeCategory === cat ? '2px solid #b85e2b' : '2px solid #e5e7eb', background: activeCategory === cat ? '#b85e2b' : '#fff', color: activeCategory === cat ? '#fff' : '#4b5563', fontWeight: '700', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s ease', boxShadow: activeCategory === cat ? '0 4px 10px rgba(184, 94, 43, 0.2)' : 'none' }}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
       </div>
 
-      <div className="category-pills" style={{ display: 'flex', gap: '10px', marginBottom: '25px', overflowX: 'auto', paddingBottom: '10px', WebkitOverflowScrolling: 'touch' }}>
-        {categories.map(cat => (
-          <button 
-            key={cat} 
-            className={`category-pill ${activeCategory === cat ? 'active' : ''}`}
-            onClick={() => setActiveCategory(cat)}
-            style={{ padding: '10px 20px', borderRadius: '20px', border: activeCategory === cat ? '2px solid #b85e2b' : '2px solid #e5e7eb', background: activeCategory === cat ? '#b85e2b' : '#fff', color: activeCategory === cat ? '#fff' : '#4b5563', fontWeight: '700', fontSize: '14px', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s ease', boxShadow: activeCategory === cat ? '0 4px 10px rgba(184, 94, 43, 0.2)' : 'none' }}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      <div className="product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '12px' }}>
+      <div className="product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '12px', paddingTop: '10px' }}>
         {filteredItems.map(item => {
           
           const available = isDrinkAvailable(item);
@@ -153,7 +201,7 @@ export default function Menu({
                 opacity: (available || isDeleteMode) ? 1 : 0.6,
                 display: 'flex',
                 flexDirection: 'column',
-                height: '100%', /* FIX 2: Ensures all cards stretch to the same height */
+                height: '100%',
                 pointerEvents: 'auto' 
               }}
               onMouseDown={(e) => (!isDeleteMode && available) && (e.currentTarget.style.transform = 'scale(0.96)')}
@@ -175,7 +223,6 @@ export default function Menu({
                 <SmoothMenuImage src={item.image_url} alt={item.name} available={available} />
               </div>
               
-              {/* FIX 3: Flex-grow wrapper pushes the price perfectly to the bottom */}
               <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between' }}>
                 <div className="product-name" style={{ fontSize: '13px', fontWeight: '800', color: '#111', marginBottom: '4px', lineHeight: '1.2' }}>{item.name}</div>
                 <div className="product-price" style={{ fontSize: '14px', fontWeight: '900', color: '#b85e2b' }}>₱ {item.price.toFixed(2)}</div>

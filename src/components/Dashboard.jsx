@@ -89,29 +89,85 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
   const lowStockCount = activeInventory.filter(item => (item.stock_qty || 0) <= 10).length;
 
-  const weeklyChartData = useMemo(() => {
+  // --- NEW: DYNAMIC CHART LOGIC ---
+  const chartData = useMemo(() => {
     const data = [];
     const today = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const targetDate = new Date();
-      targetDate.setDate(today.getDate() - i);
-      const dateString = targetDate.toDateString();
-      
-      const daySales = activeSales.filter(s => new Date(s.created_at).toDateString() === dateString);
-      const dailyTotal = daySales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
-      
-      data.push({
-        day: targetDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
-        total: dailyTotal
+    
+    if (timeFilter === 'Today') {
+      // Group by hours of the day
+      const hourBins = [
+        { label: '6 AM', min: 0, max: 9 },
+        { label: '9 AM', min: 9, max: 12 },
+        { label: '12 PM', min: 12, max: 15 },
+        { label: '3 PM', min: 15, max: 18 },
+        { label: '6 PM', min: 18, max: 21 },
+        { label: '9 PM', min: 21, max: 24 }
+      ];
+      hourBins.forEach(bin => {
+        const binSales = activeSales.filter(s => {
+          const d = new Date(s.created_at);
+          return d.toDateString() === today.toDateString() && d.getHours() >= bin.min && d.getHours() < bin.max;
+        });
+        const total = binSales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+        data.push({ label: bin.label, total });
       });
+    } 
+    else if (timeFilter === 'This Month') {
+      // Group by rolling 4 weeks
+      for (let i = 3; i >= 0; i--) {
+        const startDate = new Date();
+        startDate.setDate(today.getDate() - ((i + 1) * 7));
+        const endDate = new Date();
+        endDate.setDate(today.getDate() - (i * 7));
+        
+        const binSales = activeSales.filter(s => {
+          const d = new Date(s.created_at);
+          return d > startDate && d <= endDate;
+        });
+        const total = binSales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+        data.push({ label: `WK ${4 - i}`, total });
+      }
+    } 
+    else if (timeFilter === 'All Time') {
+      // Group by Last 6 Months
+      for (let i = 5; i >= 0; i--) {
+        const targetDate = new Date();
+        targetDate.setMonth(today.getMonth() - i);
+        const targetMonth = targetDate.getMonth();
+        const targetYear = targetDate.getFullYear();
+        const monthStr = targetDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+        
+        const binSales = activeSales.filter(s => {
+          const d = new Date(s.created_at);
+          return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
+        });
+        const total = binSales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+        data.push({ label: monthStr, total });
+      }
+    } 
+    else {
+      // Default: 'This Week' (Last 7 Days)
+      for (let i = 6; i >= 0; i--) {
+        const targetDate = new Date();
+        targetDate.setDate(today.getDate() - i);
+        const dateString = targetDate.toDateString();
+        
+        const daySales = activeSales.filter(s => new Date(s.created_at).toDateString() === dateString);
+        const dailyTotal = daySales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+        
+        data.push({
+          label: targetDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
+          total: dailyTotal
+        });
+      }
     }
     return data;
-  }, [activeSales]);
+  }, [activeSales, timeFilter]);
 
-  const maxChartValue = Math.max(...weeklyChartData.map(d => d.total), 1);
+  const maxChartValue = Math.max(...chartData.map(d => d.total), 1);
 
-
-  // --- NEW, HIGHLY ORGANIZED EXPORT LOGIC ---
+  // --- BRANDED PDF EXPORT LOGIC ---
   const handleExport = async () => {
     setIsExporting(true);
 
@@ -154,51 +210,87 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       });
 
       const branchNameLabel = selectedBranch === 'All' ? 'ALL BRANCHES' : (branches.find(b => b.id === selectedBranch)?.name || 'STORE');
-      
-      const escapeCSV = (val) => {
-        if (val === null || val === undefined) return '""';
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) return `"${str.replace(/"/g, '""')}"`;
-        return str;
-      };
-
-      let csv = '\uFEFF'; 
-      
-      // ==========================================
-      // GLOBAL HEADER
-      // ==========================================
-      csv += "TALLYBREW MASTER DATA EXPORT,,,,,,,,,,,\n";
-      csv += `Generated On:,${escapeCSV(new Date().toLocaleString())},,,,,,,,,,\n`;
-      csv += `Location Filter:,${escapeCSV(branchNameLabel.toUpperCase())},,,,,,,,,,\n`;
-      csv += `Time Filter:,${escapeCSV(timeFilter.toUpperCase())},,,,,,,,,,\n`;
-      csv += ",,,,,,,,,,,\n";
-
-      // GLOBAL SUMMARY (Only show if looking at 'All Branches')
-      if (selectedBranch === 'All') {
-        csv += "--- GLOBAL OVERVIEW (ALL BRANCHES) ---,,,,,,,,,,,\n";
-        csv += "Total Gross Revenue,Total Transactions,Avg Order Value,Total Items Sold,Total Physical Cash,Total GCash\n";
-        csv += `${totalSales.toFixed(2)},${ordersServed},${avgOrderValue.toFixed(2)},${totalItemsSold},${totalCashReceived.toFixed(2)},${totalGCashReceived.toFixed(2)}\n`;
-        csv += ",,,,,,,,,,,\n"; 
-      }
-
-      // ==========================================
-      // BRANCH BY BRANCH BREAKDOWN
-      // ==========================================
       const targetBranches = selectedBranch === 'All' ? branches : branches.filter(b => b.id === selectedBranch);
 
-      targetBranches.forEach(branch => {
+      // BUILD HTML FOR PDF
+      let html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>TallyBrew Report - ${branchNameLabel}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+            body { 
+              font-family: 'Inter', sans-serif; 
+              color: #3B2213; 
+              background: #fff; 
+              margin: 0; 
+              padding: 40px; 
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important;
+            }
+            .header { text-align: center; border-bottom: 4px solid #B56124; padding-bottom: 20px; margin-bottom: 30px; }
+            .logo { max-width: 180px; margin-bottom: 10px; }
+            h1 { font-size: 28px; font-weight: 900; margin: 0 0 5px 0; color: #3B2213; letter-spacing: -1px; }
+            .meta-info { font-size: 14px; font-weight: 600; color: #6b7280; margin: 0; }
+            .meta-info span { color: #B56124; font-weight: 800; }
+            
+            .global-summary { display: flex; gap: 15px; margin-bottom: 30px; }
+            .summary-card { flex: 1; background: #FDFBF7; border: 2px solid #E6D0A9; border-radius: 12px; padding: 15px; text-align: center; }
+            .summary-label { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #B56124; margin-bottom: 5px; }
+            .summary-value { font-size: 22px; font-weight: 900; color: #3B2213; }
+            
+            .branch-section { page-break-before: always; padding-top: 20px; }
+            .branch-header { background: #3B2213; color: #FDFBF7; padding: 15px 20px; border-radius: 12px; font-size: 18px; font-weight: 900; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+            
+            h3 { font-size: 14px; font-weight: 900; color: #B56124; text-transform: uppercase; margin: 25px 0 10px 0; border-bottom: 2px dashed #E6D0A9; padding-bottom: 5px; }
+            
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; page-break-inside: avoid; }
+            th { background-color: #FDFBF7; color: #B56124; font-weight: 800; padding: 10px; text-align: left; border-bottom: 2px solid #E6D0A9; }
+            td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; color: #3B2213; font-weight: 600; }
+            tr:nth-child(even) td { background-color: #fafafa; }
+            
+            .badge { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; }
+            .badge-danger { background: #fee2e2; color: #dc2626; }
+            .badge-warn { background: #fef3c7; color: #d97706; }
+            .badge-safe { background: #d1fae5; color: #059669; }
+
+            .footer { text-align: center; margin-top: 50px; font-size: 10px; color: #9ca3af; font-weight: 600; border-top: 1px solid #e5e7eb; padding-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <img src="${window.location.origin}${import.meta.env.BASE_URL}images/TallyBrewPosLogo.png" alt="TallyBrew Logo" class="logo" onerror="this.style.display='none'" />
+            <h1>MASTER DATA REPORT</h1>
+            <p class="meta-info">Generated: <span>${new Date().toLocaleString()}</span> &nbsp;|&nbsp; Filter: <span>${timeFilter.toUpperCase()}</span> &nbsp;|&nbsp; Location: <span>${branchNameLabel.toUpperCase()}</span></p>
+          </div>
+      `;
+
+      if (selectedBranch === 'All') {
+        html += `
+          <div class="global-summary">
+            <div class="summary-card"><div class="summary-label">Total Revenue</div><div class="summary-value">₱${totalSales.toLocaleString(undefined, {minimumFractionDigits:2})}</div></div>
+            <div class="summary-card"><div class="summary-label">Transactions</div><div class="summary-value">${ordersServed}</div></div>
+            <div class="summary-card"><div class="summary-label">Avg Order Value</div><div class="summary-value">₱${avgOrderValue.toFixed(2)}</div></div>
+            <div class="summary-card"><div class="summary-label">Items Sold</div><div class="summary-value">${totalItemsSold}</div></div>
+          </div>
+          <div class="global-summary">
+            <div class="summary-card"><div class="summary-label">Total Physical Cash</div><div class="summary-value">₱${totalCashReceived.toLocaleString(undefined, {minimumFractionDigits:2})}</div></div>
+            <div class="summary-card"><div class="summary-label">Total GCash</div><div class="summary-value">₱${totalGCashReceived.toLocaleString(undefined, {minimumFractionDigits:2})}</div></div>
+          </div>
+        `;
+      }
+
+      targetBranches.forEach((branch, index) => {
         const bId = branch.id;
         const bName = branch.name;
 
-        // Filter data for this specific branch
         const bSales = filteredSales.filter(s => s.branch_id === bId);
         const bShifts = filteredShifts.filter(s => s.branch_id === bId);
         const bInventory = activeInventory.filter(i => i.branch_id === bId);
 
-        // Skip completely empty branches to avoid cluttering the report
         if (bSales.length === 0 && bShifts.length === 0 && bInventory.length === 0) return;
 
-        // Calculate Branch-Specific Metrics
         let bTotalSales = 0, bItemsSold = 0, bDineIn = 0, bTakeout = 0, bDiscounted = 0;
         let bCash = 0, bGCash = 0;
         let bItemCounts = {};
@@ -243,22 +335,30 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
           });
         });
 
-        // SECTION HEADER
-        csv += `========================================================================================\n`;
-        csv += `📍 BRANCH REPORT: ${escapeCSV(bName.toUpperCase())}\n`;
-        csv += `========================================================================================\n`;
-        
-        // 1. BRANCH SUMMARY
-        csv += "\n[1] SALES & METRICS SUMMARY,,,,,,,,,,,\n";
-        csv += "Revenue (PHP),Transactions,Cash Received,GCash Received,Items Sold,Dine-In,Take-Out,Discounted Orders,Unique Customers\n";
-        csv += `${bTotalSales.toFixed(2)},${bSales.length},${bCash.toFixed(2)},${bGCash.toFixed(2)},${bItemsSold},${bDineIn},${bTakeout},${bDiscounted},${bUniqueCustomers.size}\n`;
-        csv += ",,,,,,,,,,,\n";
+        if (selectedBranch === 'All' || index > 0) {
+          html += `<div class="branch-section">`;
+        } else {
+          html += `<div>`;
+        }
 
-        // 2. BRANCH SHIFT LOGS
-        csv += "[2] SHIFT & Z-READING LOGS,,,,,,,,,,,\n";
-        csv += "Cashier Name,Clock In,Clock Out,Starting Float,Cash Dropped (Skim),Expected Drawer,Actual Drawer,Discrepancy\n";
+        html += `<div class="branch-header">📍 ${bName.toUpperCase()} REPORT</div>`;
+
+        // 1. Metrics
+        html += `
+          <h3>Sales & Metrics</h3>
+          <table>
+            <tr><th>Revenue</th><th>Transactions</th><th>Cash Total</th><th>GCash Total</th><th>Items Sold</th><th>Dine-In</th><th>Take-Out</th><th>Discounted</th></tr>
+            <tr>
+              <td>₱${bTotalSales.toFixed(2)}</td><td>${bSales.length}</td><td>₱${bCash.toFixed(2)}</td><td>₱${bGCash.toFixed(2)}</td>
+              <td>${bItemsSold}</td><td>${bDineIn}</td><td>${bTakeout}</td><td>${bDiscounted}</td>
+            </tr>
+          </table>
+        `;
+
+        // 2. Shifts
+        html += `<h3>Shift & Register Logs</h3><table><tr><th>Cashier</th><th>Clock In</th><th>Clock Out</th><th>Start Float</th><th>Expected</th><th>Actual</th><th>Discrepancy</th></tr>`;
         if (bShifts.length === 0) {
-          csv += "No shift records found for this period.,,,,,,,,\n";
+          html += `<tr><td colspan="7" style="text-align:center; color:#9ca3af;">No shift records found.</td></tr>`;
         } else {
           bShifts.forEach(shift => {
             const clockIn = new Date(shift.start_time).toLocaleString();
@@ -266,70 +366,59 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
             const exp = Number(shift.expected_cash || 0);
             const act = Number(shift.actual_cash || 0);
             const short = Number(shift.shortage || 0);
-            const drop = Number(shift.cash_drops || 0);
             
-            let discrepancy = 'Perfect';
-            if (short < 0) discrepancy = `SHORT: ${Math.abs(short).toFixed(2)}`;
-            if (short > 0) discrepancy = `OVER: ${short.toFixed(2)}`;
+            let discrepancy = '<span class="badge badge-safe">Perfect</span>';
+            if (short < 0) discrepancy = `<span class="badge badge-danger">SHORT: ₱${Math.abs(short).toFixed(2)}</span>`;
+            if (short > 0) discrepancy = `<span class="badge badge-warn">OVER: ₱${short.toFixed(2)}</span>`;
 
-            csv += `${escapeCSV(shift.cashier_name)},${escapeCSV(clockIn)},${escapeCSV(clockOut)},${Number(shift.starting_cash || 0).toFixed(2)},${drop.toFixed(2)},${exp.toFixed(2)},${act.toFixed(2)},${escapeCSV(discrepancy)}\n`;
+            html += `<tr><td>${shift.cashier_name}</td><td>${clockIn}</td><td>${clockOut}</td><td>₱${Number(shift.starting_cash || 0).toFixed(2)}</td><td>₱${exp.toFixed(2)}</td><td>₱${act.toFixed(2)}</td><td>${discrepancy}</td></tr>`;
           });
         }
-        csv += ",,,,,,,,,,,\n";
+        html += `</table>`;
 
-        // 3. BRANCH TOP PRODUCTS
-        csv += "[3] PRODUCT PERFORMANCE,,,,,,,,,,,\n";
-        csv += "Rank,Item Name,Quantity Sold,,,,,,,,\n";
+        // 3. Products
+        html += `<h3>Product Performance</h3><table><tr><th>Rank</th><th>Item Name</th><th>Quantity Sold</th></tr>`;
         const sortedItems = Object.entries(bItemCounts).sort((a, b) => b[1] - a[1]);
         if (sortedItems.length === 0) {
-          csv += "-,No items sold in this period.,,,,,,,,,\n";
+           html += `<tr><td colspan="3" style="text-align:center; color:#9ca3af;">No items sold.</td></tr>`;
         } else {
-          sortedItems.forEach(([name, qty], index) => {
-            csv += `${index + 1},${escapeCSV(name)},${qty},,,,,,,,\n`;
+          sortedItems.forEach(([name, qty], idx) => {
+            html += `<tr><td>#${idx + 1}</td><td>${name}</td><td>${qty}</td></tr>`;
           });
         }
-        csv += ",,,,,,,,,,,\n";
+        html += `</table>`;
 
-        // 4. BRANCH INVENTORY
-        csv += "[4] CURRENT INVENTORY AUDIT,,,,,,,,,,,\n";
-        csv += "Ingredient / Item Name,Current Stock Level,Unit,Status Warning,,,,,,,\n";
+        // 4. Inventory
+        html += `<h3>Inventory Audit</h3><table><tr><th>Ingredient / Item Name</th><th>Current Stock Level</th><th>Status Warning</th></tr>`;
         const sortedInv = [...bInventory].sort((a, b) => Number(a.stock_qty || 0) - Number(b.stock_qty || 0));
         if (sortedInv.length === 0) {
-           csv += "No inventory data available.,,,,,,,,,,\n";
+          html += `<tr><td colspan="3" style="text-align:center; color:#9ca3af;">No inventory data available.</td></tr>`;
         } else {
           sortedInv.forEach(item => {
             const stock = Number(item.stock_qty || 0);
-            let status = 'Healthy';
-            if (stock <= 0) status = 'OUT OF STOCK';
-            else if (stock <= 10) status = 'CRITICAL - RESTOCK NOW';
-            else if (stock <= 30) status = 'Low Stock';
-            csv += `${escapeCSV(item.name)},${stock},${escapeCSV(item.unit)},${escapeCSV(status)},,,,,,\n`;
+            let status = '<span class="badge badge-safe">Healthy</span>';
+            if (stock <= 0) status = '<span class="badge badge-danger">OUT OF STOCK</span>';
+            else if (stock <= 10) status = '<span class="badge badge-danger">CRITICAL - RESTOCK NOW</span>';
+            else if (stock <= 30) status = '<span class="badge badge-warn">Low Stock</span>';
+            
+            html += `<tr><td>${item.name}</td><td>${stock} ${item.unit}</td><td>${status}</td></tr>`;
           });
         }
-        csv += ",,,,,,,,,,,\n";
+        html += `</table>`;
 
-        // 5. BRANCH MASTER LEDGER
-        csv += "[5] MASTER TRANSACTION LEDGER,,,,,,,,,,,\n";
-        csv += "Date,Time,Order ID,Customer Name,Order Type,Payment Method,Total (PHP),Cash Part (PHP),GCash Part (PHP),Discount,Items Breakdown\n";
+        // 5. Ledger
+        html += `<h3>Master Transaction Ledger</h3><table><tr><th>Date/Time</th><th>Customer</th><th>Type</th><th>Method</th><th>Total</th><th>Items</th></tr>`;
         if (bSales.length === 0) {
-          csv += "No transactions found for this period.,,,,,,,,,,\n";
+          html += `<tr><td colspan="6" style="text-align:center; color:#9ca3af;">No transactions found.</td></tr>`;
         } else {
           const sortedBSales = [...bSales].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
           sortedBSales.forEach(s => {
             const dateObj = new Date(s.created_at);
-            const date = dateObj.toLocaleDateString();
-            const time = dateObj.toLocaleTimeString();
+            const dateTime = `${dateObj.toLocaleDateString()} ${dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
             
             let method = s.payment_method || 'Cash';
-            let displayMethod = method;
-            if (method === 'GCash') {
-                 const match = s.items_summary?.match(/\(Ref: (\d+)\)/);
-                 if (match) displayMethod = `GCash (Ref: ${match[1]})`;
-            }
-
             let orderType = "Unknown";
             let customerName = "Guest";
-            let discountType = "None";
             let pureItems = s.items_summary || "No details";
 
             const typeMatch = pureItems.match(/\[(.*?)\]/);
@@ -344,37 +433,31 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
               pureItems = customerSplit.slice(1).join(' - ');
             }
 
-            const discountMatch = pureItems.match(/\(w\/ (.*?) Discount\)/);
-            if (discountMatch) {
-              discountType = discountMatch[1];
-              pureItems = pureItems.replace(`(w/ ${discountType} Discount)`, '').trim();
-            }
-
-            const amt = Number(s.total_amount || 0);
-            let cAmt = Number(s.cash_amount || 0);
-            let gAmt = Number(s.gcash_amount || 0);
-            if (method === 'Cash' && cAmt === 0 && gAmt === 0) cAmt = amt;
-            if (method === 'GCash' && cAmt === 0 && gAmt === 0) gAmt = amt;
-
-            csv += `${escapeCSV(date)},${escapeCSV(time)},${escapeCSV(s.id)},${escapeCSV(customerName)},${escapeCSV(orderType)},${escapeCSV(displayMethod)},${amt.toFixed(2)},${cAmt.toFixed(2)},${gAmt.toFixed(2)},${escapeCSV(discountType)},${escapeCSV(pureItems)}\n`;
+            html += `<tr><td>${dateTime}</td><td>${customerName}</td><td>${orderType}</td><td>${method}</td><td>₱${Number(s.total_amount || 0).toFixed(2)}</td><td><span style="font-size: 10px; color: #6b7280;">${pureItems}</span></td></tr>`;
           });
         }
-        
-        csv += "\n\n"; // Padding before the next branch
+        html += `</table></div>`; 
       });
 
-      // TRIGGER DOWNLOAD
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      const safeDate = new Date().toISOString().split('T')[0];
-      const safeBranch = branchNameLabel.replace(/\s+/g, '_');
-      link.download = `TallyBrew_Detailed_Report_${safeBranch}_${timeFilter.replace(/\s+/g, '_')}_${safeDate}.csv`;
-      link.click();
+      html += `
+          <div class="footer">
+            TallyBrew POS System Report.<br>
+            © ${new Date().getFullYear()} TallyBrew
+          </div>
+        </body></html>
+      `;
+
+      const printWindow = window.open('', '_blank', 'width=900,height=800');
+      printWindow.document.write(html);
+      printWindow.document.close();
+      
+      setTimeout(() => {
+        printWindow.print();
+        setIsExporting(false);
+      }, 500);
 
     } catch (err) {
-      alert("Error generating Detailed Report: " + err.message);
-    } finally {
+      alert("Error generating PDF Report: " + err.message);
       setIsExporting(false);
     }
   };
@@ -385,11 +468,10 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       
       {(isLoading || isExporting) && (
         <div style={{ position: 'absolute', top: '10px', right: 'clamp(15px, 4vw, 40px)', background: '#B56124', color: '#fff', padding: '6px 14px', borderRadius: '12px', fontSize: '12px', fontWeight: '900', animation: 'pulse 1.5s infinite', zIndex: 100, boxShadow: '0 4px 10px rgba(181, 97, 36, 0.3)' }}>
-          {isExporting ? 'Generating Report...' : 'Fetching Data...'}
+          {isExporting ? 'Generating PDF...' : 'Fetching Data...'}
         </div>
       )}
 
-      {}
       <div className="dashboard-header" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: 'clamp(20px, 4vw, 35px)' }}>
         <h1 style={{ margin: 0, fontSize: 'clamp(20px, 4vw, 25px)', fontWeight: '900', color: '#111', letterSpacing: '-0.5px' }}>Store Performance</h1>
         
@@ -418,13 +500,12 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
             <option value="All Time">All Time</option>
           </select>
           
-          <button className="export-btn" onClick={handleExport} disabled={isExporting} style={{ flex: '1 1 auto', padding: '10px 16px', borderRadius: '10px', cursor: isExporting ? 'not-allowed' : 'pointer', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontSize: '14px', fontWeight: '800', boxShadow: '0 4px 10px rgba(59, 34, 19, 0.2)', transition: 'transform 0.1s', opacity: isExporting ? 0.7 : 1, whiteSpace: 'nowrap' }} onMouseDown={(e)=> !isExporting && (e.target.style.transform='scale(0.95)')} onMouseUp={(e)=>!isExporting && (e.target.style.transform='scale(1)')}>
-            {isExporting ? 'Exporting...' : 'Export Report'}
+          <button className="export-btn no-print" onClick={handleExport} disabled={isExporting} style={{ flex: '1 1 auto', padding: '10px 16px', borderRadius: '10px', cursor: isExporting ? 'not-allowed' : 'pointer', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontSize: '14px', fontWeight: '800', boxShadow: '0 4px 10px rgba(59, 34, 19, 0.2)', transition: 'transform 0.1s', opacity: isExporting ? 0.7 : 1, whiteSpace: 'nowrap' }} onMouseDown={(e)=> !isExporting && (e.target.style.transform='scale(0.95)')} onMouseUp={(e)=>!isExporting && (e.target.style.transform='scale(1)')}>
+            {isExporting ? 'Generating PDF...' : 'Export PDF Report'}
           </button>
         </div>
       </div>
 
-      {}
       <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: 'clamp(25px, 5vw, 40px)' }}>
         
         <div className="kpi-card" style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', padding: '20px', borderRadius: '16px', background: '#fff', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #f3f4f6' }}>
@@ -466,13 +547,12 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         </div>
       </div>
 
-      {}
       <div className="chart-section" style={{ width: '100%', paddingBottom: '15px' }}>
-        <h2 className="chart-title" style={{ marginBottom: '20px', fontSize: 'clamp(18px, 3vw, 22px)', fontWeight: '900', color: '#111', textAlign: 'left' }}>Sales Trend (Last 7 Days)</h2>
+        <h2 className="chart-title" style={{ marginBottom: '20px', fontSize: 'clamp(18px, 3vw, 22px)', fontWeight: '900', color: '#111', textAlign: 'left' }}>Sales Trend ({timeFilter})</h2>
         
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '20px' }}>
           <div className="trend-chart-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '250px', minWidth: '450px', padding: '20px', border: '2px dashed #e5e7eb', borderRadius: '20px', backgroundColor: '#fff' }}>
-            {weeklyChartData.map((d, i) => (
+            {chartData.map((d, i) => (
               <div key={i} className="trend-bar-wrapper" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
                 <span className="trend-tooltip" style={{ fontSize: '12px', marginBottom: '8px', color: '#6b7280', fontWeight: '700' }}>₱{d.total.toFixed(0)}</span>
                 
@@ -487,7 +567,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
                     transition: 'height 0.3s ease'
                   }}
                 ></div>
-                <span className="trend-label" style={{ marginTop: '10px', fontSize: '12px', fontWeight: '800', color: '#9ca3af' }}>{d.day}</span>
+                <span className="trend-label" style={{ marginTop: '10px', fontSize: '12px', fontWeight: '800', color: '#9ca3af' }}>{d.label}</span>
               </div>
             ))}
           </div>

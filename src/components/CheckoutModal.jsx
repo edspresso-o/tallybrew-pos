@@ -129,7 +129,6 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
     `);
     printWindow.document.close();
     
-    // THE FIX: Extended to exactly 2 seconds (2000ms) to let the mechanical print animation finish perfectly.
     setTimeout(() => {
       handleFinishOrder();
     }, 2000);
@@ -145,18 +144,17 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
         .hide-arrows { -moz-appearance: textfield; }
         @keyframes popIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         
-        /* THE FIX: Realistic Thermal Printer "Step" Animation */
         @keyframes thermalPrintAndTear {
           0% { transform: translateY(0); opacity: 1; }
-          10% { transform: translateY(-15px); opacity: 1; }  /* Step 1 */
-          15% { transform: translateY(-15px); opacity: 1; }  /* Pause */
-          30% { transform: translateY(-40px); opacity: 1; }  /* Step 2 */
-          35% { transform: translateY(-40px); opacity: 1; }  /* Pause */
-          50% { transform: translateY(-70px); opacity: 1; }  /* Step 3 */
-          55% { transform: translateY(-70px); opacity: 1; }  /* Pause */
-          70% { transform: translateY(-110px); opacity: 1; } /* Final step out */
-          80% { transform: translateY(-100px) scale(0.98); opacity: 1; } /* Tension/dip for tear */
-          100% { transform: translateY(-400px) scale(0.9); opacity: 0; } /* Swift tear off and away */
+          10% { transform: translateY(-15px); opacity: 1; }  
+          15% { transform: translateY(-15px); opacity: 1; }  
+          30% { transform: translateY(-40px); opacity: 1; }  
+          35% { transform: translateY(-40px); opacity: 1; }  
+          50% { transform: translateY(-70px); opacity: 1; }  
+          55% { transform: translateY(-70px); opacity: 1; }  
+          70% { transform: translateY(-110px); opacity: 1; } 
+          80% { transform: translateY(-100px) scale(0.98); opacity: 1; } 
+          100% { transform: translateY(-400px) scale(0.9); opacity: 0; } 
         }
         .receipt-printing {
           animation: thermalPrintAndTear 2s cubic-bezier(0.25, 0.8, 0.25, 1) forwards !important;
@@ -177,22 +175,22 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
       
       {!showReceipt ? (
         
-        // --- RESPONSIVE PAYMENT SCREEN ---
-        <div className="mobile-scroll" style={{ backgroundColor: '#FDFBF7', padding: '20px', borderRadius: '24px', width: '100%', maxWidth: '420px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
+        // THE FIX: Tightened paddings and margins to lift the confirm button higher!
+        <div className="mobile-scroll" style={{ backgroundColor: '#FDFBF7', padding: '16px', borderRadius: '24px', width: '100%', maxWidth: '400px', maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(59, 34, 19, 0.5)', animation: 'popIn 0.3s', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }}>
           
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#3B2213', margin: 0, letterSpacing: '-0.5px' }}>Checkout Payment</h2>
-            <button onClick={onClose} style={{ background: '#E6D0A9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#3B2213', fontSize: '18px', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>&times;</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '900', color: '#3B2213', margin: 0, letterSpacing: '-0.5px' }}>Checkout Payment</h2>
+            <button onClick={onClose} style={{ background: '#E6D0A9', border: 'none', width: '28px', height: '28px', borderRadius: '50%', color: '#3B2213', fontSize: '16px', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>&times;</button>
           </div>
 
-          <div style={{ display: 'flex', background: '#F5E8D2', padding: '4px', borderRadius: '12px', gap: '4px', marginBottom: '15px' }}>
+          <div style={{ display: 'flex', background: '#F5E8D2', padding: '4px', borderRadius: '12px', gap: '4px', marginBottom: '10px' }}>
             {['dine-in', 'takeout'].map(type => {
               const isActive = orderType === type;
               return (
                 <button 
                   key={type} 
                   onClick={() => setOrderType(type)} 
-                  style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', background: isActive ? '#fff' : 'transparent', color: isActive ? '#3B2213' : '#B56124', fontWeight: '800', fontSize: '13px', cursor: 'pointer', boxShadow: isActive ? '0 4px 10px rgba(59,34,19,0.1)' : 'none', transition: 'all 0.2s' }}
+                  style={{ flex: 1, padding: '8px', borderRadius: '10px', border: 'none', background: isActive ? '#fff' : 'transparent', color: isActive ? '#3B2213' : '#B56124', fontWeight: '800', fontSize: '12px', cursor: 'pointer', boxShadow: isActive ? '0 4px 10px rgba(59,34,19,0.1)' : 'none', transition: 'all 0.2s' }}
                 >
                   {type === 'dine-in' ? 'Dine In' : 'Take Out'}
                 </button>
@@ -205,28 +203,28 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
             placeholder="Customer Name (Optional)" 
             value={customerName} 
             onChange={(e) => setCustomerName(e.target.value)} 
-            style={{ width: '100%', padding: '12px 16px', boxSizing: 'border-box', border: '2px solid #E6D0A9', borderRadius: '12px', marginBottom: '15px', fontSize: '14px', fontWeight: '700', color: '#3B2213', outline: 'none', transition: 'border-color 0.2s', background: '#fff' }}
+            style={{ width: '100%', padding: '10px 14px', boxSizing: 'border-box', border: '2px solid #E6D0A9', borderRadius: '10px', marginBottom: '10px', fontSize: '13px', fontWeight: '700', color: '#3B2213', outline: 'none', transition: 'border-color 0.2s', background: '#fff' }}
             onFocus={(e) => e.target.style.borderColor = '#B56124'}
             onBlur={(e) => e.target.style.borderColor = '#E6D0A9'}
           />
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '15px 20px', borderRadius: '16px', border: '2px dashed #B56124', marginBottom: '15px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '900', color: '#B56124', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount Payable</span>
-            <span style={{ fontSize: '28px', fontWeight: '900', color: '#3B2213', letterSpacing: '-1px' }}>₱{totalAmount.toFixed(2)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '12px 16px', borderRadius: '14px', border: '2px dashed #B56124', marginBottom: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '900', color: '#B56124', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount Payable</span>
+            <span style={{ fontSize: '24px', fontWeight: '900', color: '#3B2213', letterSpacing: '-1px' }}>₱{totalAmount.toFixed(2)}</span>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
             <button 
               onClick={() => { setPaymentMethod('Cash'); setGcashReference(''); }} 
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '12px', borderRadius: '12px', border: paymentMethod === 'Cash' ? '2px solid #3B2213' : '2px solid #E6D0A9', background: paymentMethod === 'Cash' ? '#3B2213' : '#fff', color: paymentMethod === 'Cash' ? '#fff' : '#3B2213', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s', boxShadow: paymentMethod === 'Cash' ? '0 8px 16px rgba(59,34,19,0.2)' : 'none' }}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '10px', borderRadius: '12px', border: paymentMethod === 'Cash' ? '2px solid #3B2213' : '2px solid #E6D0A9', background: paymentMethod === 'Cash' ? '#3B2213' : '#fff', color: paymentMethod === 'Cash' ? '#fff' : '#3B2213', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s', boxShadow: paymentMethod === 'Cash' ? '0 8px 16px rgba(59,34,19,0.2)' : 'none' }}
             >
-              <span style={{ fontSize: '18px', fontWeight: '900' }}>₱</span> Cash
+              <span style={{ fontSize: '16px', fontWeight: '900' }}>₱</span> Cash
             </button>
             <button 
               onClick={() => { setPaymentMethod('GCash'); setReceivedAmount(''); }} 
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '12px', borderRadius: '12px', border: paymentMethod === 'GCash' ? '2px solid #2563eb' : '2px solid #E6D0A9', background: paymentMethod === 'GCash' ? '#2563eb' : '#fff', color: paymentMethod === 'GCash' ? '#fff' : '#3B2213', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s', boxShadow: paymentMethod === 'GCash' ? '0 8px 16px rgba(37,99,235,0.2)' : 'none' }}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '10px', borderRadius: '12px', border: paymentMethod === 'GCash' ? '2px solid #2563eb' : '2px solid #E6D0A9', background: paymentMethod === 'GCash' ? '#2563eb' : '#fff', color: paymentMethod === 'GCash' ? '#fff' : '#3B2213', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s', boxShadow: paymentMethod === 'GCash' ? '0 8px 16px rgba(37,99,235,0.2)' : 'none' }}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
               GCash
             </button>
           </div>
@@ -234,21 +232,21 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
           {paymentMethod === 'Cash' ? (
             <div style={{ animation: 'popIn 0.2s' }}>
               <div style={{ position: 'relative', marginBottom: '10px' }}>
-                <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px', fontWeight: '900', color: '#B56124' }}>₱</span>
+                <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '16px', fontWeight: '900', color: '#B56124' }}>₱</span>
                 <input 
                   type="number" 
                   className="hide-arrows"
                   placeholder="0.00" 
                   value={receivedAmount} 
                   onChange={(e) => setReceivedAmount(e.target.value)} 
-                  style={{ width: '100%', padding: '14px 16px 14px 40px', boxSizing: 'border-box', border: '2px solid #E6D0A9', borderRadius: '12px', fontSize: '20px', fontWeight: '900', color: '#3B2213', outline: 'none', background: '#fff', transition: 'border-color 0.2s' }} 
+                  style={{ width: '100%', padding: '12px 14px 12px 35px', boxSizing: 'border-box', border: '2px solid #E6D0A9', borderRadius: '10px', fontSize: '18px', fontWeight: '900', color: '#3B2213', outline: 'none', background: '#fff', transition: 'border-color 0.2s' }} 
                   onFocus={(e) => e.target.style.borderColor = '#B56124'}
                   onBlur={(e) => e.target.style.borderColor = '#E6D0A9'}
                   autoFocus
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '4px', marginBottom: '15px' }}>
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
                 <button className="quick-cash-btn" onClick={() => setReceivedAmount(totalAmount)}>Exact</button>
                 <button className="quick-cash-btn" onClick={() => setReceivedAmount(100)}>100</button>
                 <button className="quick-cash-btn" onClick={() => setReceivedAmount(200)}>200</button>
@@ -256,42 +254,42 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
                 <button className="quick-cash-btn" onClick={() => setReceivedAmount(1000)}>1000</button>
               </div>
               
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', padding: '0 5px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: '#B56124', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Change Due</span>
-                <span style={{ fontSize: '18px', fontWeight: '900', color: receivedAmount && change >= 0 ? '#10b981' : '#B56124' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '0 5px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: '#B56124', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Change Due</span>
+                <span style={{ fontSize: '16px', fontWeight: '900', color: receivedAmount && change >= 0 ? '#10b981' : '#B56124' }}>
                   {receivedAmount ? (change >= 0 ? `₱${change.toFixed(2)}` : 'Insufficient') : '₱0.00'}
                 </span>
               </div>
             </div>
           ) : (
-            <div style={{ animation: 'popIn 0.2s', textAlign: 'center', marginBottom: '15px' }}>
+            <div style={{ animation: 'popIn 0.2s', textAlign: 'center', marginBottom: '10px' }}>
               {qrCodeUrl ? (
                 <>
-                  <div style={{ position: 'relative', display: 'inline-block', marginBottom: '10px', padding: '8px', background: '#fff', borderRadius: '16px', border: '2px dashed #2563eb' }}>
-                    <img src={qrCodeUrl} alt="Store GCash QR" style={{ width: '150px', height: '150px', objectFit: 'contain', borderRadius: '12px' }} />
+                  <div style={{ position: 'relative', display: 'inline-block', marginBottom: '10px', padding: '6px', background: '#fff', borderRadius: '12px', border: '2px dashed #2563eb' }}>
+                    <img src={qrCodeUrl} alt="Store GCash QR" style={{ width: '120px', height: '120px', objectFit: 'contain', borderRadius: '8px' }} />
                     <button 
                       onClick={handleRemoveQr} 
-                      style={{ position: 'absolute', top: '-10px', right: '-10px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '50%', width: '28px', height: '28px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }}
+                      style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '50%', width: '24px', height: '24px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }}
                     >
                       &times;
                     </button>
                   </div>
                   
-                  <p style={{ color: '#1e3a8a', fontSize: '13px', fontWeight: '800', marginTop: '0', marginBottom: '10px' }}>Customer scans to pay ₱{totalAmount.toFixed(2)}</p>
+                  <p style={{ color: '#1e3a8a', fontSize: '12px', fontWeight: '800', marginTop: '0', marginBottom: '8px' }}>Customer scans to pay ₱{totalAmount.toFixed(2)}</p>
 
                   <input 
                     type="text" 
                     placeholder="Enter GCash Ref. No." 
                     value={gcashReference} 
                     onChange={(e) => setGcashReference(e.target.value.replace(/[^0-9]/g, ''))} 
-                    style={{ width: '100%', padding: '14px', boxSizing: 'border-box', border: '2px solid #2563eb', borderRadius: '12px', fontSize: '16px', fontWeight: '900', color: '#1e3a8a', outline: 'none', textAlign: 'center', letterSpacing: '1px', background: '#eff6ff' }} 
+                    style={{ width: '100%', padding: '12px', boxSizing: 'border-box', border: '2px solid #2563eb', borderRadius: '10px', fontSize: '14px', fontWeight: '900', color: '#1e3a8a', outline: 'none', textAlign: 'center', letterSpacing: '1px', background: '#eff6ff' }} 
                   />
                 </>
               ) : (
-                <label style={{ display: 'block', border: '2px dashed #2563eb', borderRadius: '16px', padding: '20px', cursor: 'pointer', background: '#eff6ff', transition: '0.2s' }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '8px' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                  <div style={{ color: '#2563eb', fontWeight: '900', fontSize: '14px' }}>Upload Store GCash QR</div>
-                  <div style={{ color: '#3b82f6', fontWeight: '600', fontSize: '11px', marginTop: '4px' }}>(Saves permanently to this device)</div>
+                <label style={{ display: 'block', border: '2px dashed #2563eb', borderRadius: '12px', padding: '15px', cursor: 'pointer', background: '#eff6ff', transition: '0.2s' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '6px' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  <div style={{ color: '#2563eb', fontWeight: '900', fontSize: '13px' }}>Upload Store GCash QR</div>
+                  <div style={{ color: '#3b82f6', fontWeight: '600', fontSize: '10px', marginTop: '4px' }}>(Saves permanently to this device)</div>
                   <input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
                 </label>
               )}
@@ -301,7 +299,7 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
           <button 
             onClick={handleProcessPayment} 
             disabled={!isPaid} 
-            style={{ width: '100%', padding: '16px', borderRadius: '12px', border: 'none', background: isPaid ? (paymentMethod === 'GCash' ? '#2563eb' : '#3B2213') : '#E6D0A9', color: isPaid ? '#fff' : '#B56124', fontSize: '15px', fontWeight: '900', cursor: isPaid ? 'pointer' : 'not-allowed', transition: 'all 0.2s', boxShadow: isPaid ? (paymentMethod === 'GCash' ? '0 8px 20px rgba(37,99,235,0.3)' : '0 8px 20px rgba(59,34,19,0.3)') : 'none', textTransform: 'uppercase', letterSpacing: '1px' }}
+            style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', background: isPaid ? (paymentMethod === 'GCash' ? '#2563eb' : '#3B2213') : '#E6D0A9', color: isPaid ? '#fff' : '#B56124', fontSize: '14px', fontWeight: '900', cursor: isPaid ? 'pointer' : 'not-allowed', transition: 'all 0.2s', boxShadow: isPaid ? (paymentMethod === 'GCash' ? '0 8px 20px rgba(37,99,235,0.3)' : '0 8px 20px rgba(59,34,19,0.3)') : 'none', textTransform: 'uppercase', letterSpacing: '1px' }}
           >
             Confirm Payment
           </button>
@@ -443,8 +441,8 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
                        <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #E6D0A9', fontSize: '10px', color: '#B56124', lineHeight: '1.5' }}>
                          <b style={{ color: '#3B2213', fontSize: '11px' }}>TallyBrew POS System</b><br />
                          Developed by:<br />
-                         SAPNU, Princess Iyah M.<br />
-                         Dizon, Edward Arce<br />
+                         Sapnu, Princess Iyah M.<br />
+                         Dizon, Edward A.<br />
                          Magcalas, Kathleen Rose V.<br />
                          Juico, Precious Elaine Q.<br />
                          Sermenio, Tyrone Jay D.<br />
@@ -461,7 +459,6 @@ export default function CheckoutModal({ isOpen, onClose, total, onConfirm, cart,
             </div>
           </div>
 
-          {/* THE FIX: Button text changes to match the mechanical animation vibe! */}
           <button 
             onClick={handlePrintAndSave} 
             disabled={isProcessing}

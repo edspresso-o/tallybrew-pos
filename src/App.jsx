@@ -228,7 +228,6 @@ function App() {
 
   const saveOffline = (orderPackage) => { const pending = getOfflineQueue(); pending.push(orderPackage); localStorage.setItem('tallybrew_offline_queue', encryptData(pending)); setPendingSalesCount(pending.length); };
 
-  // --- THE FIX IS HERE: Added view === 'Settings' to the manager/admin check ---
   const handleNavigationRequest = (view) => { const role = activeCashier?.role || 'cashier'; if ((view === 'Dashboard' || view === 'Inventory' || view === 'Transactions' || view === 'Settings') && role !== 'manager' && role !== 'admin') { setPendingAction({ type: 'navigate', payload: view }); setShowManagerAuth(true); } else { setCurrentView(view); } };
   
   const requestDeleteProduct = (id) => { const role = activeCashier?.role || 'cashier'; if (role !== 'manager' && role !== 'admin') { setPendingAction({ type: 'delete', payload: id }); setShowManagerAuth(true); } else { showConfirm("Are you sure you want to delete this product? This action cannot be undone.", () => performDeleteProduct(id)); } };
@@ -237,33 +236,23 @@ function App() {
   const performVoidSale = async (sale) => { try { await supabase.from('sale_items').delete().eq('sale_id', sale.id); await supabase.from('sales').delete().eq('id', sale.id); showAlert("Transaction successfully voided.", "confirm"); fetchAllData(); } catch (err) { showAlert("Error voiding transaction: " + err.message, "error"); } };
   const performDeleteProduct = async (id) => { try { await supabase.from('products').delete().eq('id', id); fetchAllData(); } catch (error) { showAlert("Error deleting product: " + error.message, "error"); } };
 
-  /* ========================================= */
-  /* 🔒 SECURE MANAGER OVERRIDE FUNCTION       */
-  /* ========================================= */
   const executeManagerOverride = async () => {
     try {
-      // 1. CLEAN THE INPUTS (Crucial for avoiding silent database rejections)
       const cleanPin = String(managerPinInput).trim();
       const cleanBranch = effectiveBranch ? String(effectiveBranch).trim() : null;
 
-      console.log("DEBUG: Attempting override. PIN:", cleanPin, "Branch:", cleanBranch);
-
-      // 2. Call the Supabase Bouncer
       const { data, error } = await supabase.rpc('secure_manager_login', {
         entered_pin: cleanPin,
         current_branch: cleanBranch
       });
 
-      // 3. Catch actual Database/Network Errors
       if (error) {
-        console.error("Supabase RPC Error:", error);
         setShowManagerAuth(false); 
         showAlert(`Database Error: ${error.message}`, "error");
         setManagerPinInput("");
         return;
       }
 
-      // 4. If Supabase says NO (Wrong PIN or no permission)
       if (data === false) {
         setShowManagerAuth(false); 
         showAlert("Action Denied: Incorrect PIN or you do not have Manager privileges for this branch.", "error");
@@ -271,7 +260,6 @@ function App() {
         return;
       }
 
-      // 5. IF SUPABASE SAYS YES: Execute the action!
       if (pendingAction.type === 'navigate') setCurrentView(pendingAction.payload);
       else if (pendingAction.type === 'delete') performDeleteProduct(pendingAction.payload);
       else if (pendingAction.type === 'discount') setIsDiscountOpen(true);
@@ -304,7 +292,21 @@ function App() {
 
   if (isRecovering) return <Auth isRecovering={true} onRecoveryComplete={() => { setIsRecovering(false); window.location.hash = ''; window.location.reload(); }} />;
   if (!session) return showLanding ? <LandingPage onLoginClick={() => setShowLanding(false)} /> : <Auth />;
-  if (isKitchenKiosk) return <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f3f4f6', display: 'flex', flexDirection: 'column', zIndex: 9999 }}><button onClick={() => { setIsKitchenKiosk(false); localStorage.removeItem('tallybrew_kiosk'); }} style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10000, padding: '12px 20px', borderRadius: '12px', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>← Exit Kitchen Mode</button><KitchenDisplay /></div>;
+  
+  // --- THE MINIMIZE KITCHEN SCREEN VIEW ---
+  if (isKitchenKiosk) return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f3f4f6', display: 'flex', flexDirection: 'column', zIndex: 9999 }}>
+      <button 
+        onClick={() => { setIsKitchenKiosk(false); localStorage.removeItem('tallybrew_kiosk'); }} 
+        className="no-print" 
+        style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10000, padding: '12px 20px', borderRadius: '12px', border: 'none', backgroundColor: '#3B2213', color: '#E6D0A9', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 15px rgba(59,34,19,0.3)', display: 'flex', alignItems: 'center', gap: '8px' }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
+        Exit Kitchen Mode
+      </button>
+      <KitchenDisplay />
+    </div>
+  );
 
   const displayedItems = activeCategory === 'All' ? menuItems.filter(i => i.category !== 'Add-on' && i.category !== 'Milk') : menuItems;
 
@@ -330,6 +332,38 @@ function App() {
         .popup-overlay > div::-webkit-scrollbar { display: none; } .popup-overlay > div { -ms-overflow-style: none; scrollbar-width: none; }
         @media (max-width: 600px) { .main-content > div { padding: 15px !important; } .kpi-grid { grid-template-columns: 1fr !important; } }
         .responsive-cart-wrapper { height: 100%; z-index: 1000; background: #fff; display: flex; flex-direction: column; } .mobile-cart-fab { display: none; } .mobile-cart-close-btn { display: none; }
+        
+        .admin-banner-wrapper {
+          background-color: #f3f4f6; 
+          padding: 20px 24px 0 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center; 
+          flex-shrink: 0;
+          z-index: 10;
+        }
+        .admin-banner-content {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          background: #ffffff;
+          padding: 10px 20px;
+          border-radius: 16px;
+          border: 1px solid #E6D0A9;
+          box-shadow: 0 4px 15px rgba(59, 34, 19, 0.04);
+          width: fit-content;
+        }
+
+        /* FIX: Ensures desktop cart maintains fixed width alongside the menu */
+        @media (min-width: 851px) { 
+          .mobile-only-overlay { display: none !important; } 
+          .responsive-cart-wrapper { 
+            width: 380px !important; 
+            min-width: 380px !important; 
+            border-left: 1px solid #e5e7eb; 
+          }
+        }
+
         @media (max-width: 850px) {
           .scroll-container { padding-top: 85px !important; }
           .responsive-cart-wrapper { position: fixed; top: 0; right: -100%; width: 85% !important; max-width: 400px; transition: right 0.3s ease; box-shadow: -5px 0 25px rgba(0,0,0,0.2); }
@@ -337,20 +371,25 @@ function App() {
           .mobile-cart-fab { display: flex; position: fixed; bottom: 25px; right: 25px; background: #3B2213; color: #fff; padding: 16px 24px; border-radius: 30px; font-size: 15px; font-weight: 900; box-shadow: 0 8px 20px rgba(59,34,19,0.4); border: 2px solid #E6D0A9; z-index: 998; align-items: center; gap: 10px; cursor: pointer; }
           .mobile-cart-close-btn { display: flex; background: #3B2213; color: #E6D0A9; border: none; padding: 15px 25px; font-weight: 900; font-size: 16px; text-transform: uppercase; cursor: pointer; align-items: center; justify-content: flex-start; gap: 10px; }
           .mobile-only-overlay { display: block !important; }
+
+          .admin-banner-wrapper {
+            justify-content: flex-start;
+            padding: 15px 15px 0 70px; 
+          }
+          .admin-banner-content {
+            width: 100%;
+            padding: 8px 15px;
+          }
+          
+          .has-admin-banner .scroll-container { 
+            padding-top: 15px !important; 
+          }
         }
-        @media (min-width: 851px) { .mobile-only-overlay { display: none !important; } }
       `}</style>
 
       {(!isOnline || pendingSalesCount > 0) && (
         <div className="no-print" style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10000, background: isOnline ? '#10b981' : '#ef4444', color: '#fff', padding: '10px 20px', borderRadius: '30px', fontWeight: '800', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', animation: 'popIn 0.3s' }}>
           {isOnline ? ( <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Syncing {pendingSalesCount} Orders...<button onClick={clearStuckOfflineQueue} style={{ marginLeft: '10px', background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>Clear Stuck Orders</button></> ) : ( <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg> Offline Mode ({pendingSalesCount} Pending)</> )}
-        </div>
-      )}
-
-      {activeCashier && activeLocation === 'admin_remote' && currentView !== 'Dashboard' && empireBranches.length > 0 && (
-        <div className="no-print" style={{ position: 'absolute', top: '30px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#3B2213', padding: '12px 25px', borderRadius: '30px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 10px 25px rgba(59,34,19,0.3)', border: '2px solid #E6D0A9', animation: 'popIn 0.3s' }}>
-           <span style={{color: '#E6D0A9', fontWeight: '900', fontSize: '13px', textTransform: 'uppercase'}}>📍 Editing:</span>
-           <select value={adminViewBranch || ''} onChange={(e) => setAdminViewBranch(e.target.value)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '16px', fontWeight: '900', outline: 'none', cursor: 'pointer' }}>{empireBranches.map(b => <option key={b.id} value={b.id} style={{color: '#111'}}>{b.name}</option>)}</select>
         </div>
       )}
 
@@ -363,15 +402,50 @@ function App() {
           
           <Sidebar currentView={currentView} setCurrentView={handleNavigationRequest} activeCashier={activeCashier} isMobileNavOpen={isMobileNavOpen} setIsMobileNavOpen={setIsMobileNavOpen} activeShift={activeShift} />
           
-          <div className="main-content" style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+          <div 
+            className={`main-content ${activeLocation === 'admin_remote' && currentView !== 'Dashboard' ? 'has-admin-banner' : ''}`} 
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}
+          >
             
+            {activeCashier && activeLocation === 'admin_remote' && currentView !== 'Dashboard' && empireBranches.length > 0 && (
+              <div className="admin-banner-wrapper no-print">
+                <div className="admin-banner-content">
+                  <span style={{ fontSize: '18px' }}>📍</span>
+                  <span style={{ fontSize: '12px', fontWeight: '900', color: '#B56124', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Editing:</span>
+                  <select 
+                    value={adminViewBranch || ''} 
+                    onChange={(e) => setAdminViewBranch(e.target.value)} 
+                    style={{ flex: 1, background: 'transparent', border: 'none', color: '#3B2213', fontSize: '15px', fontWeight: '900', outline: 'none', cursor: 'pointer', textOverflow: 'ellipsis' }}
+                  >
+                    {empireBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
             {currentView === 'Dashboard' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: '0px' }}><Dashboard sales={sales} menuItems={inventory} setCurrentView={handleNavigationRequest} /></div>}
             
-            {currentView === 'Kitchen' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><KitchenDisplay /></div>}
+            {/* --- THE MAXIMIZE KITCHEN SCREEN VIEW --- */}
+            {currentView === 'Kitchen' && (
+              <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: '0px', position: 'relative' }}>
+                <button 
+                  onClick={() => { setIsKitchenKiosk(true); localStorage.setItem('tallybrew_kiosk', 'true'); }} 
+                  className="no-print" 
+                  style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 100, background: '#3B2213', color: '#E6D0A9', border: 'none', padding: '10px 16px', borderRadius: '12px', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(59,34,19,0.3)' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                  </svg>
+                  Maximize Screen
+                </button>
+                <KitchenDisplay />
+              </div>
+            )}
             
+            {/* THE FIX: Re-wrapped Menu and Cart inside a flex row so they sit side-by-side perfectly on desktop */}
             {currentView === 'Menu' && (
-              <>
-                <div className="scroll-container" style={{ flex: 1, height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px', paddingBottom: '100px' }}>
+              <div style={{ display: 'flex', flexDirection: 'row', flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
+                <div className="scroll-container" style={{ flex: 1, height: '100%', overflowY: 'auto', paddingTop: '0px', paddingBottom: '100px' }}>
                   <Menu menuItems={displayedItems} categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} addToCart={handleItemClick} onManageClick={() => setIsAddProductOpen(true)} deleteProduct={requestDeleteProduct} editProduct={setEditingProduct} inventory={inventory} recipes={recipes} />
                 </div>
                 {isMobileCartOpen && ( <div onClick={() => setIsMobileCartOpen(false)} style={{position: 'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(59, 34, 19, 0.6)', backdropFilter: 'blur(3px)', zIndex: 999}} className="mobile-only-overlay"></div> )}
@@ -386,14 +460,14 @@ function App() {
                   </div>
                 )}
                 <button className="mobile-cart-fab no-print" onClick={() => setIsMobileCartOpen(true)}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>View Cart ({cart.reduce((sum, item) => sum + item.qty, 0)})</button>
-              </>
+              </div>
             )}
             
-            {currentView === 'Transactions' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><Transactions sales={sales} onVoidSale={requestVoidSale} activeCashier={activeCashier} /></div>}
+            {currentView === 'Transactions' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: '0px' }}><Transactions sales={sales} onVoidSale={requestVoidSale} activeCashier={activeCashier} /></div>}
             
-            {currentView === 'Inventory' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} /></div>}
+            {currentView === 'Inventory' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: '0px' }}><Inventory ingredients={inventory} onRestockClick={(item) => { setSelectedInventoryItem(item); setIsRestockOpen(true); }} onAddIngredientClick={() => setIsAddIngredientOpen(true)} onWastageClick={() => setIsWastageOpen(true)} /></div>}
             
-            {currentView === 'Settings' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: activeLocation === 'admin_remote' ? '70px' : '0px' }}><Settings activeCashier={activeCashier} activeShift={activeShift} onUpdateShift={setActiveShift} onPrepareEndShift={prepareEndShift} branchId={effectiveBranch} /></div>}
+            {currentView === 'Settings' && <div className="scroll-container" style={{ flex: 1, width: '100%', height: '100%', overflowY: 'auto', paddingTop: '0px' }}><Settings activeCashier={activeCashier} activeShift={activeShift} onUpdateShift={setActiveShift} onPrepareEndShift={prepareEndShift} branchId={effectiveBranch} /></div>}
           
           </div>
         </div>

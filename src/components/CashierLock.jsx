@@ -171,7 +171,6 @@ export default function CashierLock({ onUnlock }) {
               width: '100%', 
               height: 'auto', 
               marginBottom: '0px',
-              filter: 'drop-shadow(0 15px 25px rgba(59,34,19,0.15))',
               animation: 'fadeInDown 0.6s ease-out'
             }} 
             onError={() => setLogoError(true)}
