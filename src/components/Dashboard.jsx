@@ -89,13 +89,12 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
   const lowStockCount = activeInventory.filter(item => (item.stock_qty || 0) <= 10).length;
 
-  // --- NEW: DYNAMIC CHART LOGIC ---
+  // --- DYNAMIC CHART LOGIC ---
   const chartData = useMemo(() => {
     const data = [];
     const today = new Date();
     
     if (timeFilter === 'Today') {
-      // Group by hours of the day
       const hourBins = [
         { label: '6 AM', min: 0, max: 9 },
         { label: '9 AM', min: 9, max: 12 },
@@ -114,7 +113,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       });
     } 
     else if (timeFilter === 'This Month') {
-      // Group by rolling 4 weeks
       for (let i = 3; i >= 0; i--) {
         const startDate = new Date();
         startDate.setDate(today.getDate() - ((i + 1) * 7));
@@ -130,7 +128,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       }
     } 
     else if (timeFilter === 'All Time') {
-      // Group by Last 6 Months
       for (let i = 5; i >= 0; i--) {
         const targetDate = new Date();
         targetDate.setMonth(today.getMonth() - i);
@@ -147,7 +144,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       }
     } 
     else {
-      // Default: 'This Week' (Last 7 Days)
       for (let i = 6; i >= 0; i--) {
         const targetDate = new Date();
         targetDate.setDate(today.getDate() - i);
@@ -169,7 +165,19 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
   // --- BRANDED PDF EXPORT LOGIC ---
   const handleExport = async () => {
+    if (isExporting) return;
     setIsExporting(true);
+
+    // THE FIX: Open the window IMMEDIATELY to bypass mobile Safari/Chrome popup blockers
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Please allow pop-ups for this site to export reports.");
+      setIsExporting(false);
+      return;
+    }
+
+    // Show a loading state inside the new window
+    printWindow.document.write('<html><body style="font-family: sans-serif; padding: 20px;"><h2>Generating TallyBrew Report... Please wait.</h2></body></html>');
 
     try {
       let shiftQuery = supabase.from('shifts').select('*').order('created_at', { ascending: false });
@@ -341,7 +349,8 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
           html += `<div>`;
         }
 
-        html += `<div class="branch-header">📍 ${bName.toUpperCase()} REPORT</div>`;
+        // THE FIX: Removed the Map Pin emoji from the PDF export here!
+        html += `<div class="branch-header">${bName.toUpperCase()} REPORT</div>`;
 
         // 1. Metrics
         html += `
@@ -447,7 +456,8 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         </body></html>
       `;
 
-      const printWindow = window.open('', '_blank', 'width=900,height=800');
+      // OVERWRITE THE LOADING SCREEN WITH THE REAL PDF DATA
+      printWindow.document.open();
       printWindow.document.write(html);
       printWindow.document.close();
       
@@ -464,23 +474,68 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
   return (
     
-    <div className="dashboard-container" style={{ width: '100%', boxSizing: 'border-box', padding: 'clamp(15px, 4vw, 40px)', position: 'relative' }}>
+    <div className="dashboard-container">
       
+      {/* THE FIX: Highly Optimized Responsive CSS for the Dashboard */}
+      <style>{`
+        .dashboard-container {
+          width: 100%;
+          box-sizing: border-box;
+          padding: clamp(15px, 4vw, 40px);
+          position: relative;
+        }
+
+        .dashboard-header {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: space-between;
+          align-items: center;
+          gap: 15px;
+          margin-bottom: clamp(20px, 4vw, 35px);
+        }
+
+        .header-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          width: 100%;
+          max-width: max-content;
+        }
+
+        @media (max-width: 768px) {
+          .dashboard-header {
+            margin-top: 45px; /* Pushes content strictly below the floating hamburger menu! */
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .header-actions {
+            max-width: 100%;
+            flex-direction: column;
+          }
+          .header-actions select, .header-actions button {
+            width: 100%; /* Stretches buttons full width for easy tapping */
+          }
+          .kpi-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+
       {(isLoading || isExporting) && (
         <div style={{ position: 'absolute', top: '10px', right: 'clamp(15px, 4vw, 40px)', background: '#B56124', color: '#fff', padding: '6px 14px', borderRadius: '12px', fontSize: '12px', fontWeight: '900', animation: 'pulse 1.5s infinite', zIndex: 100, boxShadow: '0 4px 10px rgba(181, 97, 36, 0.3)' }}>
           {isExporting ? 'Generating PDF...' : 'Fetching Data...'}
         </div>
       )}
 
-      <div className="dashboard-header" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: 'clamp(20px, 4vw, 35px)' }}>
+      <div className="dashboard-header">
         <h1 style={{ margin: 0, fontSize: 'clamp(20px, 4vw, 25px)', fontWeight: '900', color: '#111', letterSpacing: '-0.5px' }}>Store Performance</h1>
         
-        <div className="header-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', width: '100%', maxWidth: 'max-content' }}>
+        <div className="header-actions">
           <select 
             className="filter-btn" 
             value={selectedBranch} 
             onChange={(e) => setSelectedBranch(e.target.value)}
-            style={{ flex: '1 1 auto', padding: '10px 14px', borderRadius: '10px', border: '2px solid #e5e7eb', fontSize: '14px', fontWeight: '800', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' }}
+            style={{ padding: '10px 14px', borderRadius: '10px', border: '2px solid #e5e7eb', fontSize: '14px', fontWeight: '800', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' }}
           >
             <option value="All">All Branches</option>
             {branches.map(b => (
@@ -492,7 +547,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
             className="filter-btn" 
             value={timeFilter} 
             onChange={(e) => setTimeFilter(e.target.value)}
-            style={{ flex: '1 1 auto', padding: '10px 14px', borderRadius: '10px', border: '2px solid #e5e7eb', fontSize: '14px', fontWeight: '700', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' }}
+            style={{ padding: '10px 14px', borderRadius: '10px', border: '2px solid #e5e7eb', fontSize: '14px', fontWeight: '700', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' }}
           >
             <option value="Today">Today</option>
             <option value="This Week">This Week</option>
@@ -500,7 +555,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
             <option value="All Time">All Time</option>
           </select>
           
-          <button className="export-btn no-print" onClick={handleExport} disabled={isExporting} style={{ flex: '1 1 auto', padding: '10px 16px', borderRadius: '10px', cursor: isExporting ? 'not-allowed' : 'pointer', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontSize: '14px', fontWeight: '800', boxShadow: '0 4px 10px rgba(59, 34, 19, 0.2)', transition: 'transform 0.1s', opacity: isExporting ? 0.7 : 1, whiteSpace: 'nowrap' }} onMouseDown={(e)=> !isExporting && (e.target.style.transform='scale(0.95)')} onMouseUp={(e)=>!isExporting && (e.target.style.transform='scale(1)')}>
+          <button className="export-btn no-print" onClick={handleExport} disabled={isExporting} style={{ padding: '10px 16px', borderRadius: '10px', cursor: isExporting ? 'not-allowed' : 'pointer', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontSize: '14px', fontWeight: '800', boxShadow: '0 4px 10px rgba(59, 34, 19, 0.2)', transition: 'transform 0.1s', opacity: isExporting ? 0.7 : 1, whiteSpace: 'nowrap' }} onMouseDown={(e)=> !isExporting && (e.target.style.transform='scale(0.95)')} onMouseUp={(e)=>!isExporting && (e.target.style.transform='scale(1)')}>
             {isExporting ? 'Generating PDF...' : 'Export PDF Report'}
           </button>
         </div>

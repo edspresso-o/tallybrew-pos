@@ -3,14 +3,17 @@ import React, { useState, useMemo } from 'react';
 export default function Transactions({ sales = [], onVoidSale, activeCashier, branchId }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMethod, setFilterMethod] = useState('All');
+  
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15; 
 
-  // SAFE ARRAY CHECK: Make sure 'sales' actually exists before sorting
+  // SAFE ARRAY CHECK
   const safeSales = Array.isArray(sales) ? sales : [];
 
   // Advanced Filtering & Sorting Logic
   const filteredSales = useMemo(() => {
     return [...safeSales].reverse().filter(sale => {
-      
       const safeId = String(sale.id || '').toLowerCase();
       const safeSummary = String(sale.items_summary || '').toLowerCase();
       const safeSearchTerm = String(searchTerm || '').toLowerCase();
@@ -26,11 +29,23 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
     });
   }, [safeSales, searchTerm, filterMethod]);
 
-  // Live Metrics Calculations
+  // Slice the array to only show the current page's items
+  const paginatedSales = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredSales.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredSales, currentPage]);
+
+  const totalPages = Math.ceil(filteredSales.length / itemsPerPage);
+
+  // Reset page if search changes the total pages available
+  if (currentPage > totalPages && totalPages > 0) {
+    setCurrentPage(1);
+  }
+
+  // Live Metrics Calculations 
   const totalRevenue = filteredSales.reduce((sum, sale) => sum + (Number(sale.total_amount) || 0), 0);
   const avgOrderValue = filteredSales.length > 0 ? totalRevenue / filteredSales.length : 0;
 
-  // Premium, theme-matching badges
   const getBadgeStyle = (method) => {
     const isGCash = String(method || '').toLowerCase().includes('gcash');
     return {
@@ -50,15 +65,46 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
   };
 
   return (
-    // THE FIX 1: Removed the hardcoded paddingTop: 50px and used dynamic clamp padding!
-    <div className="transactions-page" style={{ padding: 'clamp(15px, 4vw, 30px)', width: '100%', boxSizing: 'border-box', overflowY: 'auto', height: '100%' }}>
+    <div className="transactions-page">
       
-      {/* THE FIX 2: Centralized CSS for perfect responsive behavior without inline style wars */}
+      {/* THE FIX: Highly Optimized Responsive CSS */}
       <style>{`
         @keyframes popIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
         
+        .transactions-page {
+          padding: clamp(15px, 4vw, 30px);
+          width: 100%;
+          box-sizing: border-box;
+          overflow-y: auto;
+          height: 100%;
+          background-color: #f9fafb; /* Slight off-white background to make cards pop */
+        }
+
+        /* --- DESKTOP FIRST STYLES --- */
+        .page-header {
+          margin-bottom: 25px;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          flex-wrap: wrap;
+          gap: 15px;
+        }
+
+        .kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+          margin-bottom: 30px;
+        }
+
+        .filter-ribbon {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 25px;
+        }
+
         .tx-card {
-          animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+          animation: popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -108,25 +154,72 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
 
         .premium-input:focus { outline: none; border-color: #B56124 !important; box-shadow: 0 0 0 4px rgba(181, 97, 36, 0.1) !important; }
 
-        /* THE FIX 3: Perfect mobile snapping logic */
+        .pagination-btn {
+          padding: 8px 16px;
+          border-radius: 10px;
+          font-weight: 800;
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.2s;
+          border: 2px solid #e5e7eb;
+          background: #fff;
+          color: #3B2213;
+        }
+        .pagination-btn:hover:not(:disabled) { border-color: #B56124; color: #B56124; }
+        .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #f3f4f6; }
+
+        /* --- MOBILE RESPONSIVE FIXES --- */
         @media (max-width: 768px) {
-          .kpi-grid { grid-template-columns: 1fr !important; }
-          .filter-ribbon { flex-direction: column; }
-          .tx-card { flex-direction: column; align-items: flex-start; padding: 16px; gap: 16px; }
+          .page-header {
+            margin-top: 45px; /* Pushes the header below the hamburger menu! */
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          
+          .kpi-grid { 
+            grid-template-columns: 1fr; /* Stack KPI cards vertically */
+            gap: 12px;
+          }
+          
+          .filter-ribbon { 
+            flex-direction: column; /* Stack search bar and dropdown */
+          }
+          
+          .filter-ribbon select {
+            width: 100%; /* Make dropdown full width for easy tapping */
+          }
+
+          .tx-card { 
+            flex-direction: column; 
+            align-items: stretch; /* Make items stretch full width */
+            padding: 16px; 
+            gap: 16px; 
+          }
+          
           .tx-right { 
             padding-left: 0; 
             border-left: none; 
-            border-top: 2px dashed #e5e7eb; 
+            border-top: 2px dashed #e5e7eb; /* Move divider to the top */
             padding-top: 16px; 
             width: 100%; 
-            justify-content: space-between; 
+            justify-content: space-between; /* Put Total on left, Void on right */
             gap: 10px;
+          }
+
+          .tx-details-row {
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 8px !important;
+          }
+          
+          .tx-date {
+            margin-left: 0 !important;
           }
         }
       `}</style>
 
       {/* HEADER */}
-      <div style={{ marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '15px' }}>
+      <div className="page-header">
         <div>
           <h2 style={{ fontSize: 'clamp(24px, 4vw, 32px)', fontWeight: '900', color: '#111', margin: '0 0 5px 0', letterSpacing: '-0.5px' }}>Transactions</h2>
           <p style={{ color: '#B56124', fontSize: '14px', fontWeight: '700', margin: 0, textTransform: 'uppercase', letterSpacing: '1px' }}>Financial Overview & History</p>
@@ -134,7 +227,7 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
       </div>
 
       {/* LIVE KPI DASHBOARD */}
-      <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '30px' }}>
+      <div className="kpi-grid">
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #f3f4f6', borderBottom: '4px solid #10b981', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
           <p style={{ color: '#6b7280', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 5px 0' }}>Total Revenue</p>
           <h3 style={{ margin: 0, fontSize: '28px', fontWeight: '900', color: '#111' }}>₱{totalRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h3>
@@ -150,21 +243,27 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
       </div>
 
       {/* SEARCH & FILTER RIBBON */}
-      <div className="filter-ribbon" style={{ display: 'flex', gap: '12px', marginBottom: '25px' }}>
+      <div className="filter-ribbon">
         <div style={{ flex: 1, position: 'relative' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input 
             type="text" 
             placeholder="Search by Order ID or Item..." 
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1); 
+            }}
             className="premium-input"
             style={{ width: '100%', padding: '12px 12px 12px 42px', borderRadius: '12px', border: '2px solid #e5e7eb', backgroundColor: '#fff', fontSize: '14px', fontWeight: '600', color: '#111', boxSizing: 'border-box', transition: 'all 0.2s' }}
           />
         </div>
         <select 
           value={filterMethod}
-          onChange={(e) => setFilterMethod(e.target.value)}
+          onChange={(e) => {
+            setFilterMethod(e.target.value);
+            setCurrentPage(1); 
+          }}
           className="premium-input"
           style={{ padding: '12px 16px', borderRadius: '12px', border: '2px solid #e5e7eb', backgroundColor: '#fff', fontSize: '14px', fontWeight: '800', color: '#3B2213', cursor: 'pointer', outline: 'none', transition: 'all 0.2s', minWidth: '140px' }}
         >
@@ -175,9 +274,8 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
       </div>
 
       {/* TRANSACTIONS LIST */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '100px' }}>
-        {filteredSales.length === 0 ? (
-          
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '20px' }}>
+        {paginatedSales.length === 0 ? (
           /* EMPTY STATE */
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', backgroundColor: '#fff', borderRadius: '20px', border: '2px dashed #E6D0A9', marginTop: '10px', animation: 'popIn 0.3s' }}>
             <div style={{ width: '80px', height: '80px', backgroundColor: '#FDFBF7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', border: '2px solid #E6D0A9' }}>
@@ -192,16 +290,14 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
             <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#3B2213', margin: '0 0 8px 0' }}>No Records Found</h3>
             <p style={{ color: '#9ca3af', fontWeight: '600', margin: 0, textAlign: 'center', fontSize: '14px' }}>Try adjusting your search or filters.</p>
           </div>
-
         ) : (
-          filteredSales.map((sale, index) => (
+          paginatedSales.map((sale, index) => (
             
-            /* TALLYBREW PREMIUM CARD */
-            <div key={sale.id} className="tx-card" style={{ animationDelay: `${index * 0.05}s` }}>
+            <div key={sale.id} className="tx-card" style={{ animationDelay: `${index * 0.03}s` }}>
               
               {/* LEFT SIDE: Order Details */}
               <div className="tx-left"> 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div className="tx-details-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   <span style={{ color: '#111', fontSize: '16px', fontWeight: '900', letterSpacing: '0.5px' }}>
                     #{sale.id?.toString().slice(0, 6).toUpperCase() || 'SYS-01'}
                   </span>
@@ -215,19 +311,19 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
                     {sale.payment_method || 'CASH'}
                   </span>
                   
-                  <span style={{ color: '#9ca3af', fontSize: '13px', fontWeight: '700', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span className="tx-date" style={{ color: '#9ca3af', fontSize: '13px', fontWeight: '700', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                     {new Date(sale.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
                 
-                {/* Clean, Receipt-style items block */}
+                {/* Items block */}
                 <div className="tx-items">
                   {sale.items_summary}
                 </div>
               </div>
 
-              {/* RIGHT SIDE: Receipt Total & Action */}
+              {/* RIGHT SIDE: Total & Action */}
               <div className="tx-right">
                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: '90px' }}>
                   <span style={{ fontSize: '11px', fontWeight: '800', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Total Paid</span>
@@ -236,7 +332,6 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
                   </div>
                 </div>
 
-                {/* Refined Void Button */}
                 <button 
                   onClick={() => {
                     if (typeof onVoidSale === 'function') {
@@ -246,24 +341,13 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
                     }
                   }}
                   style={{ 
-                    backgroundColor: '#fff', 
-                    color: '#ef4444', 
-                    border: '2px solid #fecaca', 
-                    padding: '8px 14px', 
-                    borderRadius: '10px', 
-                    fontWeight: '800', 
-                    fontSize: '13px', 
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.2s',
-                    whiteSpace: 'nowrap'
+                    backgroundColor: '#fff', color: '#ef4444', border: '2px solid #fecaca', 
+                    padding: '10px 16px', borderRadius: '10px', fontWeight: '800', fontSize: '13px', 
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', 
+                    transition: 'all 0.2s', whiteSpace: 'nowrap'
                   }}
-                  onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#fecaca'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                  onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-                  onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(-1px)'}
+                  onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.borderColor = '#ef4444'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#fecaca'; }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
                   Void
@@ -274,6 +358,22 @@ export default function Transactions({ sales = [], onVoidSale, activeCashier, br
           ))
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', paddingBottom: '40px' }}>
+          <button className="pagination-btn" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+            ← Previous
+          </button>
+          <span style={{ fontSize: '13px', fontWeight: '800', color: '#6b7280' }}>
+            Page {currentPage} of {totalPages}
+          </span>
+          <button className="pagination-btn" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+            Next →
+          </button>
+        </div>
+      )}
+
     </div>
   );
 }

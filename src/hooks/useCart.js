@@ -7,8 +7,10 @@ export function useCart(inventory, recipes, menuItems, showAlert) {
     return saved ? JSON.parse(saved) : [];
   });
   const [discount, setDiscount] = useState({ label: 'No Discount', rate: 0 });
+  
+  // THE FIX: Default temp changed to 'Iced'
   const [modifierModal, setModifierModal] = useState({
-    isOpen: false, product: null, size: 'Regular', milk: 'Whole', addons: [] 
+    isOpen: false, product: null, size: 'Regular', milk: 'Whole', temp: 'Iced', addons: [] 
   });
 
   const availableAddons = menuItems.filter(item => item.category === 'Add-on');
@@ -76,7 +78,8 @@ export function useCart(inventory, recipes, menuItems, showAlert) {
       if (!check.allowed) { showAlert(`CRITICAL LOW STOCK: Cannot add ${product.name}. You only have ${check.stock} ${check.itemName} left.`, 'error'); return; }
       addToCart(product); return; 
     }
-    setModifierModal({ isOpen: true, product: product, size: 'Regular', milk: 'Whole', addons: [] });
+    // THE FIX: Opens with 'Iced' pre-selected
+    setModifierModal({ isOpen: true, product: product, size: 'Regular', milk: 'Whole', temp: 'Iced', addons: [] });
   };
 
   const toggleAddon = (addonObj) => {
@@ -87,7 +90,7 @@ export function useCart(inventory, recipes, menuItems, showAlert) {
   };
 
   const confirmModifiersAndAddToCart = () => {
-    const { product, size, milk, addons } = modifierModal;
+    const { product, size, milk, temp, addons } = modifierModal;
     let extraPrice = 0; let modLabels = []; const mergedRecipe = [];
 
     const addRecipeItems = (recipeStr, multiplier = 1) => {
@@ -101,10 +104,17 @@ export function useCart(inventory, recipes, menuItems, showAlert) {
       } catch(e) {}
     };
 
+    // --- APPLY MODIFIERS ---
+    
+    // 1. Temperature
+    modLabels.push(temp);
+
+    // 2. Size
     const sizeMultiplier = size === 'Large' ? 1.5 : 1;
     if (size === 'Large') { extraPrice += 20; modLabels.push('Lrg'); }
     addRecipeItems(product.recipe, sizeMultiplier);
 
+    // 3. Milk
     if (milk !== 'Whole') {
       const selectedMilkObj = availableMilks.find(m => m.name === milk);
       if (selectedMilkObj) {
@@ -115,18 +125,22 @@ export function useCart(inventory, recipes, menuItems, showAlert) {
       }
     }
     
+    // 4. Addons
     addons.forEach(a => { extraPrice += Number(a.price); modLabels.push('+' + a.name); addRecipeItems(a.recipe, 1); });
 
     const finalPrice = Number(product.price) + extraPrice;
     const modifierString = modLabels.length > 0 ? ` (${modLabels.join(', ')})` : '';
-    const uniqueId = `${product.id}-${size}-${milk}-${addons.map(a=>a.id).sort().join('-')}`;
+    
+    const uniqueId = `${product.id}-${temp}-${size}-${milk}-${addons.map(a=>a.id).sort().join('-')}`;
     const itemToCart = { ...product, id: uniqueId, name: `${product.name}${modifierString}`, price: finalPrice, recipe: JSON.stringify(mergedRecipe) };
 
     const check = checkStockAvailability(itemToCart, 1);
     if (!check.allowed) { showAlert(`CRITICAL LOW STOCK: Cannot complete this order. You only have ${check.stock} ${check.itemName} left.`, 'error'); return; }
 
     addToCart(itemToCart);
-    setModifierModal({ isOpen: false, product: null, size: 'Regular', milk: 'Whole', addons: [] });
+    
+    // THE FIX: Resets to 'Iced' after adding to cart
+    setModifierModal({ isOpen: false, product: null, size: 'Regular', milk: 'Whole', temp: 'Iced', addons: [] });
   };
 
   const updateQty = (id, amount) => { 

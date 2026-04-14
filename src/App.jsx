@@ -276,6 +276,7 @@ function App() {
       setManagerPinInput(""); 
     }
   };
+
   const addProduct = async (formData, selectedFile) => {
     try {
       let image_url = '';
@@ -285,7 +286,34 @@ function App() {
     } catch (error) { showAlert("Error adding product: " + error.message, "error"); }
   };
 
-  const addIngredient = async (formData) => { try { await supabase.from('inventory').insert([{ name: formData.name, stock_qty: parseFloat(formData.stock_qty), unit: formData.unit, branch_id: effectiveBranch }]); fetchAllData(); setIsAddIngredientOpen(false); } catch (error) { showAlert("Error adding ingredient: " + error.message, "error"); } };
+  // --- THE FIX: GLOBAL BATCH INSERT FOR INVENTORY ---
+  const addIngredient = async (formData) => { 
+    try { 
+      // 1. Fetch all branches
+      const { data: branches, error: branchError } = await supabase.from('branches').select('id');
+      if (branchError) throw branchError;
+
+      // 2. Loop through branches to create identical inventory items
+      const itemsToInsert = branches.map(branch => ({
+        name: formData.name,
+        unit: formData.unit,
+        branch_id: branch.id,
+        // Give the active branch the stock they typed, force others to 0 so they can restock!
+        stock_qty: branch.id === effectiveBranch ? parseFloat(formData.stock_qty || 0) : 0
+      }));
+
+      // 3. Send all items to the database in one blast
+      await supabase.from('inventory').insert(itemsToInsert); 
+      
+      fetchAllData(); 
+      setIsAddIngredientOpen(false); 
+      showAlert(`Success! "${formData.name}" synced to all branches.`, "confirm");
+
+    } catch (error) { 
+      showAlert("Error adding ingredient: " + error.message, "error"); 
+    } 
+  };
+  
   const handleManualRestock = async (id, newStock, invoiceData) => { await supabase.from('inventory').update({ stock_qty: newStock }).eq('id', id); fetchAllData(); setIsRestockOpen(false); setSelectedInventoryItem(null); };
   const handleRecordWastage = async (id, wasteAmount) => { const { data: ingData } = await supabase.from('inventory').select('stock_qty').eq('id', id).single(); const newStock = Number(ingData.stock_qty || 0) - Number(wasteAmount); await supabase.from('inventory').update({ stock_qty: newStock }).eq('id', id); fetchAllData(); setIsWastageOpen(false); };
   const updateProduct = async (id, updatedData) => { await supabase.from('products').update({ name: updatedData.name, price: parseFloat(updatedData.price), category: updatedData.category, recipe: updatedData.recipe || '' }).eq('id', id); fetchAllData(); setEditingProduct(null); };
@@ -442,7 +470,6 @@ function App() {
               </div>
             )}
             
-            {/* THE FIX: Re-wrapped Menu and Cart inside a flex row so they sit side-by-side perfectly on desktop */}
             {currentView === 'Menu' && (
               <div style={{ display: 'flex', flexDirection: 'row', flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
                 <div className="scroll-container" style={{ flex: 1, height: '100%', overflowY: 'auto', paddingTop: '0px', paddingBottom: '100px' }}>
