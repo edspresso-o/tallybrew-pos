@@ -17,29 +17,31 @@ export default function ModifierModal({
           <button onClick={() => setModifierModal({ ...modifierModal, isOpen: false })} style={{ background: '#E6D0A9', border: 'none', width: '36px', height: '36px', borderRadius: '50%', color: '#3B2213', fontSize: '20px', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&times;</button>
         </div>
 
-        {/* --- TEMPERATURE TOGGLE (No Emojis) --- */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: '900', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Temperature</label>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            
-            {/* Hot Button */}
-            <button 
-              onClick={() => setModifierModal({...modifierModal, temp: 'Hot'})} 
-              style={{ flex: 1, padding: '14px', borderRadius: '14px', border: modifierModal.temp === 'Hot' ? '2px solid #ef4444' : '2px solid #e5e7eb', background: modifierModal.temp === 'Hot' ? '#fef2f2' : '#fff', color: modifierModal.temp === 'Hot' ? '#ef4444' : '#3B2213', fontWeight: '900', fontSize: '14px', cursor: 'pointer', transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}
-            >
-              Hot
-            </button>
-            
-            {/* Iced Button */}
-            <button 
-              onClick={() => setModifierModal({...modifierModal, temp: 'Iced'})} 
-              style={{ flex: 1, padding: '14px', borderRadius: '14px', border: modifierModal.temp === 'Iced' ? '2px solid #3b82f6' : '2px solid #e5e7eb', background: modifierModal.temp === 'Iced' ? '#eff6ff' : '#fff', color: modifierModal.temp === 'Iced' ? '#3b82f6' : '#3B2213', fontWeight: '900', fontSize: '14px', cursor: 'pointer', transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}
-            >
-              Iced
-            </button>
+        {/* --- TEMPERATURE TOGGLE (Hidden for Frappes) --- */}
+        {modifierModal.product.category !== 'Frappe' && (
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '900', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Temperature</label>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              
+              {/* Hot Button */}
+              <button 
+                onClick={() => setModifierModal({...modifierModal, temp: 'Hot'})} 
+                style={{ flex: 1, padding: '14px', borderRadius: '14px', border: modifierModal.temp === 'Hot' ? '2px solid #ef4444' : '2px solid #e5e7eb', background: modifierModal.temp === 'Hot' ? '#fef2f2' : '#fff', color: modifierModal.temp === 'Hot' ? '#ef4444' : '#3B2213', fontWeight: '900', fontSize: '14px', cursor: 'pointer', transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}
+              >
+                Hot
+              </button>
+              
+              {/* Iced Button */}
+              <button 
+                onClick={() => setModifierModal({...modifierModal, temp: 'Iced'})} 
+                style={{ flex: 1, padding: '14px', borderRadius: '14px', border: modifierModal.temp === 'Iced' ? '2px solid #3b82f6' : '2px solid #e5e7eb', background: modifierModal.temp === 'Iced' ? '#eff6ff' : '#fff', color: modifierModal.temp === 'Iced' ? '#3b82f6' : '#3B2213', fontWeight: '900', fontSize: '14px', cursor: 'pointer', transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}
+              >
+                Iced
+              </button>
 
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Size Selection */}
         <div style={{ marginBottom: '20px' }}>

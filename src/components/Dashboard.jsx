@@ -89,7 +89,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
   const lowStockCount = activeInventory.filter(item => (item.stock_qty || 0) <= 10).length;
 
-  // --- DYNAMIC CHART LOGIC ---
   const chartData = useMemo(() => {
     const data = [];
     const today = new Date();
@@ -168,17 +167,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
     if (isExporting) return;
     setIsExporting(true);
 
-    // THE FIX: Open the window IMMEDIATELY to bypass mobile Safari/Chrome popup blockers
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert("Please allow pop-ups for this site to export reports.");
-      setIsExporting(false);
-      return;
-    }
-
-    // Show a loading state inside the new window
-    printWindow.document.write('<html><body style="font-family: sans-serif; padding: 20px;"><h2>Generating TallyBrew Report... Please wait.</h2></body></html>');
-
     try {
       let shiftQuery = supabase.from('shifts').select('*').order('created_at', { ascending: false });
       if (selectedBranch !== 'All') {
@@ -201,7 +189,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         return true;
       });
 
-      // Global Stats
       const avgOrderValue = ordersServed > 0 ? (totalSales / ordersServed) : 0;
       const totalItemsSold = filteredSales.reduce((sum, s) => sum + Number(s.items_count || 0), 0);
       
@@ -220,7 +207,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
       const branchNameLabel = selectedBranch === 'All' ? 'ALL BRANCHES' : (branches.find(b => b.id === selectedBranch)?.name || 'STORE');
       const targetBranches = selectedBranch === 'All' ? branches : branches.filter(b => b.id === selectedBranch);
 
-      // BUILD HTML FOR PDF
       let html = `
         <!DOCTYPE html>
         <html>
@@ -302,7 +288,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         let bTotalSales = 0, bItemsSold = 0, bDineIn = 0, bTakeout = 0, bDiscounted = 0;
         let bCash = 0, bGCash = 0;
         let bItemCounts = {};
-        let bUniqueCustomers = new Set();
 
         bSales.forEach(s => {
           const amount = Number(s.total_amount || 0);
@@ -324,13 +309,10 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
           let orderTypeMatch = pureItems.match(/\[(.*?)\]/);
           if (orderTypeMatch) pureItems = pureItems.replace(`[${orderTypeMatch[1]}] `, '');
 
-          let customerName = "Guest";
           const customerSplit = pureItems.split(' - ');
           if (customerSplit.length > 1) {
-            customerName = customerSplit[0].replace(/\s*\(Ref:.*?\)/, '').trim();
             pureItems = customerSplit.slice(1).join(' - ');
           }
-          if (customerName !== 'Guest') bUniqueCustomers.add(customerName);
 
           pureItems = pureItems.replace(/\(w\/.*?Discount\)/g, '');
           pureItems.split(', ').forEach(part => {
@@ -349,10 +331,8 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
           html += `<div>`;
         }
 
-        // THE FIX: Removed the Map Pin emoji from the PDF export here!
         html += `<div class="branch-header">${bName.toUpperCase()} REPORT</div>`;
 
-        // 1. Metrics
         html += `
           <h3>Sales & Metrics</h3>
           <table>
@@ -364,7 +344,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
           </table>
         `;
 
-        // 2. Shifts
         html += `<h3>Shift & Register Logs</h3><table><tr><th>Cashier</th><th>Clock In</th><th>Clock Out</th><th>Start Float</th><th>Expected</th><th>Actual</th><th>Discrepancy</th></tr>`;
         if (bShifts.length === 0) {
           html += `<tr><td colspan="7" style="text-align:center; color:#9ca3af;">No shift records found.</td></tr>`;
@@ -385,7 +364,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         }
         html += `</table>`;
 
-        // 3. Products
         html += `<h3>Product Performance</h3><table><tr><th>Rank</th><th>Item Name</th><th>Quantity Sold</th></tr>`;
         const sortedItems = Object.entries(bItemCounts).sort((a, b) => b[1] - a[1]);
         if (sortedItems.length === 0) {
@@ -397,7 +375,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         }
         html += `</table>`;
 
-        // 4. Inventory
         html += `<h3>Inventory Audit</h3><table><tr><th>Ingredient / Item Name</th><th>Current Stock Level</th><th>Status Warning</th></tr>`;
         const sortedInv = [...bInventory].sort((a, b) => Number(a.stock_qty || 0) - Number(b.stock_qty || 0));
         if (sortedInv.length === 0) {
@@ -415,7 +392,6 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         }
         html += `</table>`;
 
-        // 5. Ledger
         html += `<h3>Master Transaction Ledger</h3><table><tr><th>Date/Time</th><th>Customer</th><th>Type</th><th>Method</th><th>Total</th><th>Items</th></tr>`;
         if (bSales.length === 0) {
           html += `<tr><td colspan="6" style="text-align:center; color:#9ca3af;">No transactions found.</td></tr>`;
@@ -456,14 +432,32 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
         </body></html>
       `;
 
-      // OVERWRITE THE LOADING SCREEN WITH THE REAL PDF DATA
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
-      
+      // THE FIX: iPad PWA Hidden Iframe Approach
+      // This completely removes the "Generating Report... Please Wait" blank tab
+      // and triggers the print dialog safely on top of your current screen.
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+
+      iframe.contentDocument.open();
+      iframe.contentDocument.write(html);
+      iframe.contentDocument.close();
+
       setTimeout(() => {
-        printWindow.print();
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
         setIsExporting(false);
+        // Clean up the iframe after the print dialog opens
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 2000);
       }, 500);
 
     } catch (err) {
@@ -473,10 +467,8 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
   };
 
   return (
-    
     <div className="dashboard-container">
       
-      {/* THE FIX: Highly Optimized Responsive CSS for the Dashboard */}
       <style>{`
         .dashboard-container {
           width: 100%;
@@ -504,7 +496,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
         @media (max-width: 768px) {
           .dashboard-header {
-            margin-top: 45px; /* Pushes content strictly below the floating hamburger menu! */
+            margin-top: 45px;
             flex-direction: column;
             align-items: flex-start;
           }
@@ -513,7 +505,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
             flex-direction: column;
           }
           .header-actions select, .header-actions button {
-            width: 100%; /* Stretches buttons full width for easy tapping */
+            width: 100%;
           }
           .kpi-grid {
             grid-template-columns: 1fr !important;
@@ -523,7 +515,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
 
       {(isLoading || isExporting) && (
         <div style={{ position: 'absolute', top: '10px', right: 'clamp(15px, 4vw, 40px)', background: '#B56124', color: '#fff', padding: '6px 14px', borderRadius: '12px', fontSize: '12px', fontWeight: '900', animation: 'pulse 1.5s infinite', zIndex: 100, boxShadow: '0 4px 10px rgba(181, 97, 36, 0.3)' }}>
-          {isExporting ? 'Generating PDF...' : 'Fetching Data...'}
+          {isExporting ? 'Preparing PDF...' : 'Fetching Data...'}
         </div>
       )}
 
@@ -556,7 +548,7 @@ export default function Dashboard({ sales = [], menuItems = [] }) {
           </select>
           
           <button className="export-btn no-print" onClick={handleExport} disabled={isExporting} style={{ padding: '10px 16px', borderRadius: '10px', cursor: isExporting ? 'not-allowed' : 'pointer', border: 'none', backgroundColor: '#3B2213', color: '#fff', fontSize: '14px', fontWeight: '800', boxShadow: '0 4px 10px rgba(59, 34, 19, 0.2)', transition: 'transform 0.1s', opacity: isExporting ? 0.7 : 1, whiteSpace: 'nowrap' }} onMouseDown={(e)=> !isExporting && (e.target.style.transform='scale(0.95)')} onMouseUp={(e)=>!isExporting && (e.target.style.transform='scale(1)')}>
-            {isExporting ? 'Generating PDF...' : 'Export PDF Report'}
+            {isExporting ? 'Preparing PDF...' : 'Export PDF Report'}
           </button>
         </div>
       </div>
